@@ -96,15 +96,28 @@ if __name__ == "__main__":
 	print("Duration="+str(Duration))
 	print("ErrorRate=" + str(testErr * 100) + "%")
 	SaveOrLoadModel(model , option = 's', path = SavePath)
+	
+	finfo = open('info.txt','a')
+	finfo.write((str(datetime.date.today()) + "-" + str(StartTime)) + "\n")
+	finfo.write("DataSplit=0.01, 0.01, 0.01" + "\n")
+	finfo.write("total="+str(f_count) + "\n")
+	finfo.write("lpRDD1="+str(lp1_count) + "\n")
+	finfo.write("lpRDD2="+str(lp2_count) + "\n")
+	finfo.write("lpRDD3="+str(lp3_count) + "\n")
+	finfo.write("Duration="+str(Duration) + "\n")
+	finfo.write("ErrorRate=" + str(testErr * 100) + "%" + "\n")
+	finfo.close()
+	
+	'''usable in interaction EXEC but unusable in spark-submit'''
 	SaveInfo((str(datetime.date.today()) + "-" + str(StartTime)))
 	SaveInfo("DataSplit=0.01, 0.01, 0.01", file = (SavePath + "\\info.txt"))
 	SaveInfo("total="+str(f_count), file = (SavePath + "\\info.txt"))
-	SaveInfo("lpRDD1="+str(lp1_count), file = (SavePath + "\\info.txt"))
+	SaveInfo("lpRDD1="+str(lp1_count), file = (SavePath + "/info.txt"))
 	SaveInfo("lpRDD2="+str(lp2_count), file = (SavePath + "\\info.txt"))
 	SaveInfo("lpRDD3="+str(lp3_count), file = (SavePath + "\\info.txt"))
 	SaveInfo("Duration="+str(Duration), file = (SavePath + "\\info.txt"))
 	SaveInfo("ErrorRate=" + str(testErr * 100) + "%", file = (SavePath + "\\info.txt"))
-	'''usable in interaction EXEC but unusable in spark-submit'''
+	
 
 	
 	sc.stop()
