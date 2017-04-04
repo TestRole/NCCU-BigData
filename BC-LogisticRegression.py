@@ -2,6 +2,7 @@
 from pyspark import SparkConf, SparkContext
 import numpy as np
 from time import time
+import os
 import datetime
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
@@ -44,10 +45,13 @@ def SaveOrLoadModel(model , path = ("model_" + str(datetime.date.today())) , opt
 		model = LogisticRegressionModel.load(sc, path)
 	#model = LogisticRegressionModel(weights=[...], intercept=..., numFeatures = ... , numClasses = ...)
 
-def SaveInfo(info, file = ("model_" + str(datetime.date.today()) + "\\info.txt")):
-	f = open(file ,'a')
-	f.write(info + "\n")
-	f.close()
+#unusable in spark-submit
+def SaveInfo(info, file = ("model_" + str(datetime.date.today()) + "/info.txt")):
+	if not os.path.exists(file):
+		os.makedirs(file)
+	finfo = open(file ,'a')
+	finfo.write(info + "\n")
+	finfo.close()
 		
 if __name__ == "__main__":
 	sc=CreateSparkContext()
@@ -82,6 +86,15 @@ if __name__ == "__main__":
 	
 	f_count = f.count(); lp1_count = lpRDD1.count(); lp2_count = lpRDD2.count(); lp3_count = lpRDD3.count(); 
 	
+	
+	print(str(datetime.date.today()) + "-" + str(StartTime))
+	print("DataSplit=0.01, 0.01, 0.01")
+	print("total="+str(f_count))
+	print("lpRDD1="+str(lp1_count))
+	print("lpRDD2="+str(lp2_count))
+	print("lpRDD3="+str(lp3_count))
+	print("Duration="+str(Duration))
+	print("ErrorRate=" + str(testErr * 100) + "%")
 	SaveOrLoadModel(model , option = 's', path = SavePath)
 	SaveInfo((str(datetime.date.today()) + "-" + str(StartTime)))
 	SaveInfo("DataSplit=0.01, 0.01, 0.01", file = (SavePath + "\\info.txt"))
@@ -91,5 +104,7 @@ if __name__ == "__main__":
 	SaveInfo("lpRDD3="+str(lp3_count), file = (SavePath + "\\info.txt"))
 	SaveInfo("Duration="+str(Duration), file = (SavePath + "\\info.txt"))
 	SaveInfo("ErrorRate=" + str(testErr * 100) + "%", file = (SavePath + "\\info.txt"))
+	'''usable in interaction EXEC but unusable in spark-submit'''
+
 	
 	sc.stop()
