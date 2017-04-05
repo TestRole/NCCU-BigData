@@ -1,14 +1,13 @@
 #REF:https://github.com/apache/spark/blob/master/examples/src/main/python/mllib/binary_classification_metrics_example.py
 from pyspark import SparkConf, SparkContext
 import numpy as np
-from time import time
+from time import time, strftime, localtime
 import os
-import datetime
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.classification import LogisticRegressionModel#TEST
-from pyspark.mllib.evaluation import MulticlassMetrics
-
+from pyspark.mllib.classification import LogisticRegressionModel	#wait fot TESTing , not in use
+from pyspark.mllib.evaluation import MulticlassMetrics				#wait fot TESTing , not in use
+ 
 def CreateSparkContext():
     sparkConf = SparkConf()                                            \
                          .setAppName("RunDecisionTreeRegression")           \
@@ -31,93 +30,82 @@ def SetPath(sc):
     if sc.master[0:5]=="local" :
         Path="file:/home/cs/Demo/"
     else:   
-        Path="hdfs://master:9000/data/"
-'''
+        Path="hdfs://master:9000/data/"'''
 
-#unuse
-def convert_float(x):
-	return float(x)
-
+def gettime(t = time(), method = ""):
+	if(method == "f"):
+	#f means floder
+		return strftime("%Y-%m-%d-%H-%M-%S(+0800)", localtime(t))
+	else:
+		return strftime("%Y-%m-%d %H:%M:%S(+0800)", localtime(t))
+		
 def LoadAndPrepare(dataset):
 	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','0'))
 	header = f.first()
 	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
+	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-2])))
+	#col[0], col[1], col[14] not in features
 	return f
 	
-def SaveOrLoadModel(model , path = ("model_" + str(datetime.date.today())) , option = 's'):
+def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
 	if (option == 's'):
-		model.save(sc, path)
+		model.save(sc, folder)
 	elif (option == 'l'):
-		model = LogisticRegressionModel.load(sc, path)
+		return LogisticRegressionModel.load(sc, folder)
 	#model = LogisticRegressionModel(weights=[...], intercept=..., numFeatures = ... , numClasses = ...)
 
-#unusable in spark-submit
-def SaveInfo(info, file = ("model_" + str(datetime.date.today()) + "/info.txt")):
-	if not os.path.exists(file):
-		os.makedirs(file)
+def SaveInfo(info, file = ("info.txt")):
+	# if not os.path.exists(file):
+		# os.makedirs(file)
 	finfo = open(file ,'a')
 	finfo.write(info + "\n")
 	finfo.close()
 		
 if __name__ == "__main__":
-	sc=CreateSparkContext()
-	
+	sc = CreateSparkContext()
 	StartTime = time()
 	
-	
-	print("=============== Loading ==============")
-	train_orig = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')
-	train_lpRDD = train_orig.map(lambda r: LabeledPoint(float(r[-1]) , r[2:13], r[15:-2]))
-	#(lpRDD1, lpRDD2, lpRDD3)= train_lpRDD.randomSplit([0.7, 0.3])
+	print("============= Loading ================")
+	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')
 	train_lpRDD.persist()
-	
-	test_orig = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')
-	test_lpRDD = test_orig.map(lambda r: LabeledPoint(float(r[-1]) , r[2:13], r[15:-2]))
+	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')
 	test_lpRDD.persist()	
 	
-	
-	print("============== Training ==============")
+	print("============= Training ===============")
 	model = LogisticRegressionWithLBFGS.train(train_lpRDD)
 	
-	
-	print("=============== Testing ==============")
+	print("============= Testing ================")
 	predictions = model.predict(test_lpRDD.map(lambda x: x.features))
 	
+	print("============= Computing ==============")
 	labelsAndPredictions = test_lpRDD.map(lambda lp: lp.label).zip(predictions)
-	testErr = labelsAndPredictions.filter(lambda lp: lp[0] != lp[1]).count() / float(test_lpRDD.count())
+	ErrCount = labelsAndPredictions.filter(lambda lp: lp[0] != lp[1]).count()
+	ErrRate = ErrCount / float(test_lpRDD.count())
 	Duration = time() - StartTime
+	# train_count = train_lpRDD.count(); test_count = test_lpRDD.count();
 	
+	print("============= Saving =================")
+	SavePath = "model_" + gettime(StartTime, "f")
 	
-	print("============= Done & Saving ==========")
-	SavePath = "model_" + str(datetime.date.today()) + "-" + str(int(StartTime))
-	
-	train_count = train_lpRDD.count(); test_count = test_lpRDD.count();
-	
-	
-	print(str(datetime.date.today()) + "-" + str(StartTime))
-	print("DataSplit=none(WHOLE)")
-	print("train="+str(train_count))
-	print("test="+str(test_count))
-	print("Duration="+str(Duration))
-	print("ErrorRate=" + str(testErr * 100) + "%")
 	SaveOrLoadModel(model , option = 's', path = SavePath)
+	SaveInfo(str(gettime(StartTime)))
+	SaveInfo("DataSplit=none(WHOLE)")
+	SaveInfo("train=9917530")	#("train="+str(train_count))
+	SaveInfo("test=6622629")	#("test="+str(test_count))
+	SaveInfo("ErrorCount=" + str(ErrCount))
+	SaveInfo("ErrorRate=" + str(ErrRate * 100) + "%")
+	SaveInfo("Duration="+str(Duration) + "\n")
+	'''fail while give parameter2 == (SavePath + "\\info.txt"))'''
 	
-	finfo = open('info.txt','a')
-	finfo.write((str(datetime.date.today()) + "-" + str(StartTime)) + "\n")
-	finfo.write("DataSplit=none(WHOLE)" + "\n")
-	finfo.write("train="+str(train_count) + "\n")
-	finfo.write("test="+str(test_count) + "\n")
-	finfo.write("Duration="+str(Duration) + "\n")
-	finfo.write("ErrorRate=" + str(testErr * 100) + "%" + "\n\n")
-	finfo.close()
+	print("============= Printing ===============")
+	print(str(gettime(StartTime)))
+	print("DataSplit=none(WHOLE)")
+	print("train=9917530")	#("train="+str(train_count))
+	print("test=6622629")	#("test="+str(test_count))
+	print("ErrorCount=" + str(ErrCount))
+	print("ErrorRate=" + str(ErrRate * 100) + "%")
+	print("Duration="+str(Duration))
 	
-	'''usable in interaction EXEC but unusable in spark-submit'''
-	SaveInfo((str(datetime.date.today()) + "-" + str(StartTime)))
-	SaveInfo("DataSplit=none(WHOLE)", file = (SavePath + "\\info.txt"))
-	SaveInfo("train="+str(train_count), file = (SavePath + "\\info.txt"))
-	SaveInfo("test="+str(test_count), file = (SavePath + "\\info.txt"))
-	SaveInfo("Duration="+str(Duration), file = (SavePath + "\\info.txt"))
-	SaveInfo("ErrorRate=" + str(testErr * 100) + "%\n", file = (SavePath + "\\info.txt"))
-
-	
+	print("============= Done ===================")
 	sc.stop()
+ 
