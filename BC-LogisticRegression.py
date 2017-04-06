@@ -43,8 +43,8 @@ def LoadAndPrepare(dataset):
 	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','0'))
 	header = f.first()
 	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
-	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-2])))
-	#col[0], col[1], col[14] not in features
+	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4]+ r[-3])))
+	#col[0], col[1], col[14], col[51] not in features
 	return f
 	
 def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
