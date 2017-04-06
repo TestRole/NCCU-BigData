@@ -1,8 +1,8 @@
 #REF:https://github.com/apache/spark/blob/master/examples/src/main/python/mllib/binary_classification_metrics_example.py
 from pyspark import SparkConf, SparkContext
-import numpy as np
 from time import time, strftime, localtime
 import os
+from numpy import concatenate
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.classification import LogisticRegressionModel	#wait fot TESTing , not in use
@@ -43,8 +43,9 @@ def LoadAndPrepare(dataset):
 	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','0'))
 	header = f.first()
 	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
-	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4]+ r[-2])))
+	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
 	#col[0], col[1], col[14], col[51] not in features
+	#col[-2] tempararily exclude to prevent the bug(Cause r[-2] is seen as integer, not a part of list)
 	return f
 	
 def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
@@ -60,15 +61,15 @@ def SaveInfo(info, file = ("info.txt")):
 	finfo = open(file ,'a')
 	finfo.write(info + "\n")
 	finfo.close()
-		
+	
 if __name__ == "__main__":
 	sc = CreateSparkContext()
 	StartTime = time()
 	
 	print("============= Loading ================")
-	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')
+	train_lpRDD = LoadAndPrepare('D:\\dataset\\expedia\\train.csv')
 	train_lpRDD.persist()
-	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')
+	test_lpRDD = LoadAndPrepare('D:\\dataset\\expedia\\test.csv')
 	test_lpRDD.persist()	
 	
 	print("============= Training ===============")
