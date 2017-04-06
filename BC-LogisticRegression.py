@@ -2,7 +2,6 @@
 from pyspark import SparkConf, SparkContext
 from time import time, strftime, localtime
 import os
-from numpy import concatenate
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.classification import LogisticRegressionModel	#wait fot TESTing , not in use
