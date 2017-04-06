@@ -44,7 +44,6 @@ def LoadAndPrepare(dataset):
 	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
 	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4] + (r[-2],))))
 	#col[0], col[1], col[14], col[51] not in features
-	#col[-2] tempararily exclude to prevent the bug(Cause r[-2] is seen as integer, not a part of list)
 	return f
 	
 def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
@@ -87,7 +86,7 @@ if __name__ == "__main__":
 	print("============= Saving =================")
 	SavePath = "model_" + gettime(StartTime, "f")
 	
-	SaveOrLoadModel(model , option = 's', path = SavePath)
+	SaveOrLoadModel(model, folder = SavePath, option = 's')
 	SaveInfo(str(gettime(StartTime)))
 	SaveInfo("DataSplit=none(WHOLE)")
 	SaveInfo("train=9917530")	#("train="+str(train_count))
