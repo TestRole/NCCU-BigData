@@ -42,8 +42,8 @@ def LoadAndPrepare(dataset):
 	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','0'))
 	header = f.first()
 	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
-	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4] + [r[-2]])))
-	#col[0], col[1], col[14], col[51] not in features
+	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+	#col[0], col[1], col[14], col[51], col[52] not in features, col[53]=col[-1] is label
 	return f
 
 def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')
 	train_lpRDD.persist()
 	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')
-	#test_lpRDD.persist()	
+	test_lpRDD.persist()	
 	
 	print("============= Training ===============")
 	model = LogisticRegressionWithLBFGS.train(train_lpRDD)
@@ -76,7 +76,7 @@ if __name__ == "__main__":
 	print("============= Testing ================")
 	predictions = model.predict(test_lpRDD.map(lambda x: x.features))
 	
-	print("============= Computing -==============")
+	print("============= Computing ==============")
 	labelsAndPredictions = test_lpRDD.map(lambda lp: lp.label).zip(predictions)
 	ErrCount = labelsAndPredictions.filter(lambda lp: lp[0] != lp[1]).count()
 	ErrRate = ErrCount / float(test_lpRDD.count())
