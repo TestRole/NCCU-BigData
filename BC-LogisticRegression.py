@@ -41,18 +41,21 @@ def gettime(t = time(), method = ""):
 def LoadAndPrepare(dataset):
 	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','0'))
 	header = f.first()
-	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))
-	f = f.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
-	#col[0], col[1], col[14], col[51], col[52] not in features, col[53]=col[-1] is label
+	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))\
+		.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+	#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
 	return f
+
+def ModelPredict(model, dataset):
+	return model.predict(dataset.map(lambda x: x.features))
 
 def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
 	if (option == 's'):
 		model.save(sc, folder)
 	elif (option == 'l'):
 		return LogisticRegressionModel.load(sc, folder)
-	#model = LogisticRegressionModel(weights=[...], intercept=..., numFeatures = ... , numClasses = ...)
 
+#unuse
 def SaveInfo(info, file = ("info.txt")):
 	# if not os.path.exists(file):
 		# os.makedirs(file)
@@ -63,47 +66,90 @@ def SaveInfo(info, file = ("info.txt")):
 if __name__ == "__main__":
 	sc = CreateSparkContext()
 	StartTime = time()
+	SavePath = gettime(StartTime, "f")
 	
 	print("============= Loading ================")
-	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')
-	train_lpRDD.persist()
-	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')
-	test_lpRDD.persist()	
-	
+	(train_lpRDD_1, train_lpRDD_2, train_lpRDD_3, train_lpRDD_4, Validtion_lpRDD)\
+		= LoadAndPrepare('G:\\dataset\\expedia\\train.csv').randomSplit([1, 1, 1, 1, 1])
+	'''
+		#These codes NEED MORE DEBUG to compute the correct results!
+		#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
+		train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+		train_lpRDD.persist()
+			#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
+		test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
+		test_lpRDD.persist()
+	'''
 	print("============= Training ===============")
-	model = LogisticRegressionWithLBFGS.train(train_lpRDD)
+	models = [LogisticRegressionWithLBFGS.train(train_lpRDD_1) , \
+				LogisticRegressionWithLBFGS.train(train_lpRDD_2) , \
+				LogisticRegressionWithLBFGS.train(train_lpRDD_3) , \
+				LogisticRegressionWithLBFGS.train(train_lpRDD_4)]
+	for i in range(4):
+		SaveOrLoadModel(models[i], folder = "model_" + SavePath + "\\" + str(i+1), option = 's')
 	
-	print("============= Testing ================")
-	predictions = model.predict(test_lpRDD.map(lambda x: x.features))
+	print("============= Predicting =============")
+	predictions = [\
+		ModelPredict(models[0], Validtion_lpRDD) , \
+		ModelPredict(models[1], Validtion_lpRDD) , \
+		ModelPredict(models[2], Validtion_lpRDD) , \
+		ModelPredict(models[3], Validtion_lpRDD)]
 	
 	print("============= Computing ==============")
-	labelsAndPredictions = test_lpRDD.map(lambda lp: lp.label).zip(predictions)
-	ErrCount = labelsAndPredictions.filter(lambda lp: lp[0] != lp[1]).count()
-	ErrRate = ErrCount / float(test_lpRDD.count())
-	Duration = time() - StartTime
-	# train_count = train_lpRDD.count(); test_count = test_lpRDD.count();
+	LabelsAndPredictions = [\
+		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[0]) , \
+		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[1]) , \
+		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[2]) , \
+		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[3])]
+	ErrCount = [\
+		LabelsAndPredictions[0].filter(lambda lp: (lp[0] != lp[1])).count() , \
+		LabelsAndPredictions[1].filter(lambda lp: (lp[0] != lp[1])).count() , \
+		LabelsAndPredictions[2].filter(lambda lp: (lp[0] != lp[1])).count() , \
+		LabelsAndPredictions[3].filter(lambda lp: (lp[0] != lp[1])).count()]
+
+	# ErrRate = ErrCount / float(Validtion_lpRDD.count())
+	ModelingDuration = time() - StartTime
+	
+	train_count = [\
+		train_lpRDD_1.count() , \
+		train_lpRDD_2.count() , \
+		train_lpRDD_3.count() , \
+		train_lpRDD_4.count()]
+	Validtion_count = Validtion_lpRDD.count();
 	
 	print("============= Saving =================")
-	SavePath = "model_" + gettime(StartTime, "f")
-	
-	SaveOrLoadModel(model, folder = SavePath, option = 's')
-	SaveInfo(str(gettime(StartTime)))
-	SaveInfo("DataSplit=none(WHOLE)")
-	SaveInfo("train=9917530")	#("train="+str(train_count))
-	SaveInfo("test=6622629")	#("test="+str(test_count))
-	SaveInfo("ErrorCount=" + str(ErrCount))
-	SaveInfo("ErrorRate=" + str(ErrRate * 100) + "%")
-	SaveInfo("Duration="+str(Duration) + "\n")
-	'''fail while give parameter2 == (SavePath + "\\info.txt"))'''
+	for i in range(4):
+		fPrediction = open(("Prediction" + str(i) + ".csv") , 'a')
+		for each in LabelsAndPredictions:
+			for (label, prediction) in each.collect():
+				fpredict.write(str(label) + str(prediction) + "\n")
+		f.colse()
+	finfo = open('info.txt' , 'a')
+	finfo.write(str(gettime(StartTime)) + "\n")
+	finfo.write("DataSplit=none(WHOLE)" + "\n")
+	finfo.write("train_1=" + str(train_count[0]) + "\n")
+	finfo.write("train_2=" + str(train_count[1]) + "\n")
+	finfo.write("train_3=" + str(train_count[2]) + "\n")
+	finfo.write("train_4=" + str(train_count[3]) + "\n")
+	finfo.write("Validation=" + str(Validatiom_count) + "\n")
+	finfo.write("MinimumErrorCount=" + str(min(ErrCount)) + "\n")
+	# finfo.write("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%\n")
+	finfo.write("ModelingDuration="+str(ModelingDuration) + "\n\n")
+	finfo.close()
+	'''fail while give parameter2 == (AnyPath + "\\info.txt"))'''
 	
 	print("============= Printing ===============")
-	print(str(gettime(StartTime)))
 	print("DataSplit=none(WHOLE)")
-	print("train=9917530")	#("train="+str(train_count))
-	print("test=6622629")	#("test="+str(test_count))
-	print("ErrorCount=" + str(ErrCount))
-	print("ErrorRate=" + str(ErrRate * 100) + "%")
-	print("Duration="+str(Duration))
+	print("train_1=" + str(train_count[0]))
+	print("train_2=" + str(train_count[1]))
+	print("train_3=" + str(train_count[2]))
+	print("train_4=" + str(train_count[3]))
+	print("Validation=" + str(Validatiom_count))
+	print("MinimumErrorCount=" + str(min(ErrCount)))
+	# print("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%")
+	print("ModelingDuration="+str(ModelingDuration))
 	
 	print("============= Done ===================")
 	sc.stop()
