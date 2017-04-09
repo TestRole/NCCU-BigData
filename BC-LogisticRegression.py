@@ -24,16 +24,16 @@ def SetLogger(sc):
     logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
 
 '''
-def SetPath(sc):
-    global Path
-    if sc.master[0:5]=="local" :
-        Path="file:/home/cs/Demo/"
-    else:   
-        Path="hdfs://master:9000/data/"'''
+	def SetPath(sc):
+		global Path
+		if sc.master[0:5]=="local" :
+			Path="file:/home/cs/Demo/"
+		else:   
+			Path="hdfs://master:9000/data/"
+'''
 
 def gettime(t = time(), method = ""):
-	if(method == "f"):
-	#f means floder
+	if(method == "f"):	#f means floder
 		return strftime("%Y-%m-%d-%H-%M-%S(+0800)", localtime(t))
 	else:
 		return strftime("%Y-%m-%d %H:%M:%S(+0800)", localtime(t))
@@ -68,21 +68,21 @@ if __name__ == "__main__":
 	StartTime = time()
 	SavePath = gettime(StartTime, "f")
 	
-	print("============= Loading ================")
+	print("============= Loading ================" + gettime(time()))
 	(train_lpRDD_1, train_lpRDD_2, train_lpRDD_3, train_lpRDD_4, Validtion_lpRDD)\
 		= LoadAndPrepare('G:\\dataset\\expedia\\train.csv').randomSplit([1, 1, 1, 1, 1])
-	'''
-		#These codes NEED MORE DEBUG to compute the correct results!
-		#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
-		train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
-			.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
-		train_lpRDD.persist()
-			#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
-		test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
-			.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
-		test_lpRDD.persist()
-	'''
-	print("============= Training ===============")
+'''
+	#These codes NEED MORE DEBUG to compute the correct results!
+	#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
+	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
+		.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+	train_lpRDD.persist()
+		#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
+	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
+		.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
+	test_lpRDD.persist()
+'''
+	print("============= Training ===============" + gettime(time()))
 	models = [LogisticRegressionWithLBFGS.train(train_lpRDD_1) , \
 				LogisticRegressionWithLBFGS.train(train_lpRDD_2) , \
 				LogisticRegressionWithLBFGS.train(train_lpRDD_3) , \
@@ -90,14 +90,14 @@ if __name__ == "__main__":
 	for i in range(4):
 		SaveOrLoadModel(models[i], folder = "model_" + SavePath + "\\" + str(i+1), option = 's')
 	
-	print("============= Predicting =============")
+	print("============= Predicting =============" + gettime(time()))
 	predictions = [\
 		ModelPredict(models[0], Validtion_lpRDD) , \
 		ModelPredict(models[1], Validtion_lpRDD) , \
 		ModelPredict(models[2], Validtion_lpRDD) , \
 		ModelPredict(models[3], Validtion_lpRDD)]
 	
-	print("============= Computing ==============")
+	print("============= Computing ==============" + gettime(time()))
 	LabelsAndPredictions = [\
 		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[0]) , \
 		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[1]) , \
@@ -117,15 +117,9 @@ if __name__ == "__main__":
 		train_lpRDD_2.count() , \
 		train_lpRDD_3.count() , \
 		train_lpRDD_4.count()]
-	Validtion_count = Validtion_lpRDD.count();
+	Validtion_count = Validtion_lpRDD.count
 	
-	print("============= Saving =================")
-	for i in range(4):
-		fPrediction = open(("Prediction" + str(i) + ".csv") , 'a')
-		for each in LabelsAndPredictions:
-			for (label, prediction) in each.collect():
-				fpredict.write(str(label) + str(prediction) + "\n")
-		f.colse()
+	print("============= Saving =================" + gettime(time()))
 	finfo = open('info.txt' , 'a')
 	finfo.write(str(gettime(StartTime)) + "\n")
 	finfo.write("DataSplit=none(WHOLE)" + "\n")
@@ -133,23 +127,30 @@ if __name__ == "__main__":
 	finfo.write("train_2=" + str(train_count[1]) + "\n")
 	finfo.write("train_3=" + str(train_count[2]) + "\n")
 	finfo.write("train_4=" + str(train_count[3]) + "\n")
-	finfo.write("Validation=" + str(Validatiom_count) + "\n")
+	finfo.write("Validation=" + str(Validtion_count) + "\n")
 	finfo.write("MinimumErrorCount=" + str(min(ErrCount)) + "\n")
-	# finfo.write("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%\n")
+	finfo.write("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%\n")
 	finfo.write("ModelingDuration="+str(ModelingDuration) + "\n\n")
 	finfo.close()
 	'''fail while give parameter2 == (AnyPath + "\\info.txt"))'''
 	
-	print("============= Printing ===============")
+	for i in range(4):
+		fPrediction = open(("Prediction_" + str(i) + ".csv") , 'a')
+		for each in LabelsAndPredictions:
+			for (label, prediction) in each.collect():
+				fPrediction.write(str(label) + "," + str(prediction) + "\n")
+		fPrediction.close()
+	
+	print("============= Printing ===============" + gettime(time()))
 	print("DataSplit=none(WHOLE)")
 	print("train_1=" + str(train_count[0]))
 	print("train_2=" + str(train_count[1]))
 	print("train_3=" + str(train_count[2]))
 	print("train_4=" + str(train_count[3]))
-	print("Validation=" + str(Validatiom_count))
+	print("Validation=" + str(Validtion_count))
 	print("MinimumErrorCount=" + str(min(ErrCount)))
-	# print("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%")
+	print("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%")
 	print("ModelingDuration="+str(ModelingDuration))
 	
-	print("============= Done ===================")
+	print("============= Done ===================" + gettime(time()))
 	sc.stop()
