@@ -2,9 +2,9 @@
 from pyspark import SparkConf, SparkContext
 from time import time, strftime, localtime
 import os
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.classification import LogisticRegressionModel
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
+from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
 from pyspark.mllib.evaluation import MulticlassMetrics				#wait fot TESTing , not in use
  
 def CreateSparkContext():
@@ -71,17 +71,17 @@ if __name__ == "__main__":
 	print("============= Loading ================" + gettime(time()))
 	(train_lpRDD_1, train_lpRDD_2, train_lpRDD_3, train_lpRDD_4, Validtion_lpRDD)\
 		= LoadAndPrepare('G:\\dataset\\expedia\\train.csv').randomSplit([1, 1, 1, 1, 1])
-'''
-	#These codes NEED MORE DEBUG to compute the correct results!
-	#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
-	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
-		.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
-	train_lpRDD.persist()
-		#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
-	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
-		.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
-	test_lpRDD.persist()
-'''
+	'''
+		#These codes NEED MORE DEBUG to compute the correct results!
+		#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
+		train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+		train_lpRDD.persist()
+			#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
+		test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
+		test_lpRDD.persist()
+	'''
 	print("============= Training ===============" + gettime(time()))
 	models = [LogisticRegressionWithLBFGS.train(train_lpRDD_1) , \
 				LogisticRegressionWithLBFGS.train(train_lpRDD_2) , \
@@ -89,6 +89,15 @@ if __name__ == "__main__":
 				LogisticRegressionWithLBFGS.train(train_lpRDD_4)]
 	for i in range(4):
 		SaveOrLoadModel(models[i], folder = "model_" + SavePath + "\\" + str(i+1), option = 's')
+	'''Others ML algorithms training code(temporarily saved)
+		#Decision Tree
+		model = DecisionTree.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},\
+							impurity='gini', maxDepth=5, maxBins=32)
+		NaiveBayes
+		model = NaiveBayes.train(traindata)
+		Linear regression
+		model = LinearRegressionWithSGD.train(parsedData, iterations=100, step=0.00000001)
+	'''
 	
 	print("============= Predicting =============" + gettime(time()))
 	predictions = [\
