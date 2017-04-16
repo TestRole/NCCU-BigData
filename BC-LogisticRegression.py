@@ -140,11 +140,10 @@ if __name__ == "__main__":
 	finfo.close()
 	'''fail while give parameter2 == (AnyPath + "\\info.txt"))'''
 	
-	for i in range(4):
-		fPrediction = open(("PredictionsAndLabels" + str(i) + ".csv") , 'a')
-		for each in PredictionsAndLabels:
-			for (prediction, label) in each.collect():
-				fPrediction.write(str(prediction) + "," + str(label) + "\n")
+	for i in range(len(PredictionsAndLabels)):
+		fPrediction = open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a')
+		for (prediction, label) in PredictionsAndLabels[i].collect():
+			fPrediction.write(str(prediction) + "," + str(label) + "\n")
 		fPrediction.close()
 	
 	print("============= Printing ===============" + gettime(time()))
@@ -153,8 +152,8 @@ if __name__ == "__main__":
 	for i in range(len(models)):
 		print("train" + str(i+1) + "           :" + str(trainCounts[i]))
 		print("train" + str(i+1) + "Err        :" + str(ErrCount[i]))
-		print("train" + str(i+1) + "AUC        :" + str(ModelMetrics[i].areaUnderROC) + "\n")
-		print("train" + str(i+1) + "APR        :" + str(ModelMetrics[i].areaUnderPR) + "\n")
+		print("train" + str(i+1) + "AUC        :" + str(ModelMetrics[i].areaUnderROC))
+		print("train" + str(i+1) + "APR        :" + str(ModelMetrics[i].areaUnderPR))
 	print("MinimumErrorCount:" + str(min(ErrCount)))
 	print("MinimumErrorRate :" + str(min(ErrCount) / ValidtionCount * 100) + "%")
 	print("ModelingDuration :"+str(ModelingDuration))
