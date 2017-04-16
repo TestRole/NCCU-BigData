@@ -2,14 +2,14 @@
 from pyspark import SparkConf, SparkContext
 from time import time, strftime, localtime
 import os
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.classification import LogisticRegressionModel
-from pyspark.mllib.evaluation import MulticlassMetrics				#wait fot TESTing , not in use
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel, NaiveBayes, NaiveBayesModel
+from pyspark.mllib.tree import DecisionTree, DecisionTreeModel
+from pyspark.mllib.evaluation import BinaryClassificationMetrics	#wait fot TESTing , not in use
  
 def CreateSparkContext():
     sparkConf = SparkConf()                                            \
-                         .setAppName("RunDecisionTreeRegression")           \
+                         .setAppName("NCCUBigDataProj1")           \
                          .set("spark.ui.showConsoleProgress", "false") 
     sc = SparkContext(conf = sparkConf)
     print ("master="+sc.master)    
@@ -68,89 +68,97 @@ if __name__ == "__main__":
 	StartTime = time()
 	SavePath = gettime(StartTime, "f")
 	
+	train_lpRDDs = [0] * 4
+	models = []
+	predictions = []
+	PredictionsAndLabels = []
+	ErrCount = []
+	ModelMetrics = []
+	trainCounts = []
+	
 	print("============= Loading ================" + gettime(time()))
-	(train_lpRDD_1, train_lpRDD_2, train_lpRDD_3, train_lpRDD_4, Validtion_lpRDD)\
+	(train_lpRDDs[0], train_lpRDDs[1], train_lpRDDs[2], train_lpRDDs[3], Validtion_lpRDD) \
 		= LoadAndPrepare('G:\\dataset\\expedia\\train.csv').randomSplit([1, 1, 1, 1, 1])
-'''
-	#These codes NEED MORE DEBUG to compute the correct results!
-	#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
-	train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
-		.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
-	train_lpRDD.persist()
-		#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
-	test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
-		.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
-	test_lpRDD.persist()
-'''
+	'''
+		#These codes NEED MORE DEBUG to compute the correct results!
+		#for training data, [0], [1], [14], [51], [52] not in features, [53]=[-1] is label
+		train_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\train.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , (r[2:13] + r[15:-4])))
+		train_lpRDD.persist()
+			#for testing data, thereis no [14], [51] , [52] ,[53]not in features, and there is NO label
+		test_lpRDD = LoadAndPrepare('G:\\dataset\\expedia\\test.csv')\
+			.map(lambda r: LabeledPoint(float(r[-1]) , r[2:-4]))
+		test_lpRDD.persist()
+	'''
 	print("============= Training ===============" + gettime(time()))
-	models = [LogisticRegressionWithLBFGS.train(train_lpRDD_1) , \
-				LogisticRegressionWithLBFGS.train(train_lpRDD_2) , \
-				LogisticRegressionWithLBFGS.train(train_lpRDD_3) , \
-				LogisticRegressionWithLBFGS.train(train_lpRDD_4)]
-	for i in range(4):
+	models = [LogisticRegressionWithLBFGS.train(train_lpRDDs[0]) , \
+			  DecisionTree.trainClassifier(train_lpRDDs[1], numClasses=2, categoricalFeaturesInfo={},\
+						impurity='gini', maxDepth=5, maxBins=32) , \
+			  LinearRegressionWithSGD.train(train_lpRDDs[2]) , \
+			  LinearRegressionWithSGD.train(train_lpRDDs[3])]
+			  # NaiveBayes.train(train_lpRDDs[2], 1.0) , \
+	for i in range(len(models)):
 		SaveOrLoadModel(models[i], folder = "model_" + SavePath + "\\" + str(i+1), option = 's')
+	'''
+	#Decision Tree
+	model = DecisionTree.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},\
+						impurity='gini', maxDepth=5, maxBins=32)
+	NaiveBayes
+	model = NaiveBayes.train(traindata, 1.0)
+	Linear regression
+	model = LinearRegressionWithSGD.train(parsedData, iterations=100, step=0.00000001)
+	'''
 	
 	print("============= Predicting =============" + gettime(time()))
-	predictions = [\
-		ModelPredict(models[0], Validtion_lpRDD) , \
-		ModelPredict(models[1], Validtion_lpRDD) , \
-		ModelPredict(models[2], Validtion_lpRDD) , \
-		ModelPredict(models[3], Validtion_lpRDD)]
-	
-	print("============= Computing ==============" + gettime(time()))
-	LabelsAndPredictions = [\
-		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[0]) , \
-		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[1]) , \
-		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[2]) , \
-		Validtion_lpRDD.map(lambda lp: lp.label).zip(predictions[3])]
-	ErrCount = [\
-		LabelsAndPredictions[0].filter(lambda lp: (lp[0] != lp[1])).count() , \
-		LabelsAndPredictions[1].filter(lambda lp: (lp[0] != lp[1])).count() , \
-		LabelsAndPredictions[2].filter(lambda lp: (lp[0] != lp[1])).count() , \
-		LabelsAndPredictions[3].filter(lambda lp: (lp[0] != lp[1])).count()]
+	for i in range(len(models)):
+		predictions.append(ModelPredict(models[i], Validtion_lpRDD))
 
-	# ErrRate = ErrCount / float(Validtion_lpRDD.count())
-	ModelingDuration = time() - StartTime
+	print("============= Computing ==============" + gettime(time()))
+	for i in range(len(models)):
+		PredictionsAndLabels.append(predictions[i].map(lambda x:float(x)).zip(Validtion_lpRDD.map(lambda lp: lp.label)))
+		ErrCount.append(PredictionsAndLabels[i].filter(lambda lp: (lp[0] != lp[1])).count())
+		ModelMetrics.append(BinaryClassificationMetrics(PredictionsAndLabels[i]))
+		trainCounts.append(train_lpRDDs[i].count())
+	ValidtionCount = Validtion_lpRDD.count()
 	
-	train_count = [\
-		train_lpRDD_1.count() , \
-		train_lpRDD_2.count() , \
-		train_lpRDD_3.count() , \
-		train_lpRDD_4.count()]
-	Validtion_count = Validtion_lpRDD.count
+	ModelingDuration = time() - StartTime
 	
 	print("============= Saving =================" + gettime(time()))
 	finfo = open('info.txt' , 'a')
 	finfo.write(str(gettime(StartTime)) + "\n")
-	finfo.write("DataSplit=none(WHOLE)" + "\n")
-	finfo.write("train_1=" + str(train_count[0]) + "\n")
-	finfo.write("train_2=" + str(train_count[1]) + "\n")
-	finfo.write("train_3=" + str(train_count[2]) + "\n")
-	finfo.write("train_4=" + str(train_count[3]) + "\n")
-	finfo.write("Validation=" + str(Validtion_count) + "\n")
-	finfo.write("MinimumErrorCount=" + str(min(ErrCount)) + "\n")
-	finfo.write("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%\n")
-	finfo.write("ModelingDuration="+str(ModelingDuration) + "\n\n")
+	finfo.write("DataSplit        :none(WHOLE)" + "\n")
+	for i in range(len(models)):
+		finfo.write("train" + str(i+1) + "           :" + str(trainCounts[i]) + "\n")
+		finfo.write("\ttrain" + str(i+1) + "Err    :" + str(ErrCount[i]) + "\n")
+		finfo.write("\ttrain" + str(i+1) + "AUC    :" + str(ModelMetrics[i].areaUnderROC) + "\n")#
+		finfo.write("\ttrain" + str(i+1) + "APR    :" + str(ModelMetrics[i].areaUnderPR) + "\n")#
+	finfo.write("Validation       :" + str(ValidtionCount) + "\n")
+	finfo.write("MinimumErrorCount:" + str(min(ErrCount)) + "\n")
+	finfo.write("MinimumErrorRate :" + str(float(min(ErrCount)) / ValidtionCount * 100) + "%\n")
+	finfo.write("ModelingDuration :"+str(ModelingDuration) + "\n")
+	finfo.write("TotalDuration :"+str(time()-StartTime) + "\n\n")
 	finfo.close()
 	'''fail while give parameter2 == (AnyPath + "\\info.txt"))'''
 	
 	for i in range(4):
-		fPrediction = open(("Prediction_" + str(i) + ".csv") , 'a')
-		for each in LabelsAndPredictions:
-			for (label, prediction) in each.collect():
-				fPrediction.write(str(label) + "," + str(prediction) + "\n")
+		fPrediction = open(("PredictionsAndLabels" + str(i) + ".csv") , 'a')
+		for each in PredictionsAndLabels:
+			for (prediction, label) in each.collect():
+				fPrediction.write(str(prediction) + "," + str(label) + "\n")
 		fPrediction.close()
 	
 	print("============= Printing ===============" + gettime(time()))
-	print("DataSplit=none(WHOLE)")
-	print("train_1=" + str(train_count[0]))
-	print("train_2=" + str(train_count[1]))
-	print("train_3=" + str(train_count[2]))
-	print("train_4=" + str(train_count[3]))
-	print("Validation=" + str(Validtion_count))
-	print("MinimumErrorCount=" + str(min(ErrCount)))
-	print("MinimumErrorRate=" + str(min(ErrCount) / Validtion_count * 100) + "%")
-	print("ModelingDuration="+str(ModelingDuration))
+	print("DataSplit        :none(WHOLE)")
+	print("Validation       :" + str(ValidtionCount))
+	for i in range(len(models)):
+		print("train" + str(i+1) + "           :" + str(trainCounts[i]))
+		print("train" + str(i+1) + "Err        :" + str(ErrCount[i]))
+		print("train" + str(i+1) + "AUC        :" + str(ModelMetrics[i].areaUnderROC) + "\n")
+		print("train" + str(i+1) + "APR        :" + str(ModelMetrics[i].areaUnderPR) + "\n")
+	print("MinimumErrorCount:" + str(min(ErrCount)))
+	print("MinimumErrorRate :" + str(min(ErrCount) / ValidtionCount * 100) + "%")
+	print("ModelingDuration :"+str(ModelingDuration))
 	
 	print("============= Done ===================" + gettime(time()))
+	print("TotalDuration :"+str(time()-StartTime))
 	sc.stop()
