@@ -91,9 +91,9 @@ if __name__ == "__main__":
 		test_lpRDD.persist()
 	'''
 	print("============= Training ===============" + gettime(time()))
-	models = [LogisticRegressionWithLBFGS.train(train_lpRDDs[0]) , \
+	models = [LogisticRegressionWithLBFGS.train(train_lpRDDs[0], iterations = 200) , \
 			  DecisionTree.trainClassifier(train_lpRDDs[1], numClasses=2, categoricalFeaturesInfo={},\
-						impurity='gini', maxDepth=5, maxBins=32) , \
+						impurity='gini', maxDepth=30, maxBins=32) , \
 			  LinearRegressionWithSGD.train(train_lpRDDs[2]) , \
 			  LinearRegressionWithSGD.train(train_lpRDDs[3])]
 			  # NaiveBayes.train(train_lpRDDs[2], 1.0) , \
@@ -161,3 +161,4 @@ if __name__ == "__main__":
 	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
 	sc.stop()
+    
