@@ -55,14 +55,6 @@ def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's
 	elif (option == 'l'):
 		return LogisticRegressionModel.load(sc, folder)
 
-#unuse
-def SaveInfo(info, file = ("info.txt")):
-	# if not os.path.exists(file):
-		# os.makedirs(file)
-	finfo = open(file ,'a')
-	finfo.write(info + "\n")
-	finfo.close()
-
 if __name__ == "__main__":
 	sc = CreateSparkContext()
 	StartTime = time()
@@ -124,27 +116,25 @@ if __name__ == "__main__":
 	ModelingDuration = time() - StartTime
 	
 	print("============= Saving =================" + gettime(time()))
-	finfo = open('info.txt' , 'a')
-	finfo.write(str(gettime(StartTime)) + "\n")
-	finfo.write("DataSplit        :none(WHOLE)" + "\n")
-	for i in range(len(models)):
-		finfo.write("train" + str(i+1) + "           :" + str(trainCounts[i]) + "\n")
-		finfo.write("\ttrain" + str(i+1) + "Err    :" + str(ErrCount[i]) + "\n")
-		finfo.write("\ttrain" + str(i+1) + "AUC    :" + str(ModelMetrics[i].areaUnderROC) + "\n")#
-		finfo.write("\ttrain" + str(i+1) + "APR    :" + str(ModelMetrics[i].areaUnderPR) + "\n")#
-	finfo.write("Validation       :" + str(ValidtionCount) + "\n")
-	finfo.write("MinimumErrorCount:" + str(min(ErrCount)) + "\n")
-	finfo.write("MinimumErrorRate :" + str(float(min(ErrCount)) / ValidtionCount * 100) + "%\n")
-	finfo.write("ModelingDuration :"+str(ModelingDuration) + "\n")
-	finfo.write("TotalDuration :"+str(time()-StartTime) + "\n\n")
-	finfo.close()
+	with open('info.txt' , 'a') as finfo:
+		finfo.write(str(gettime(StartTime)) + "\n")
+		finfo.write("DataSplit        :none(WHOLE)" + "\n")
+		for i in range(len(models)):
+			print("train" + str(i+1) + "           :" + str(trainCounts[i]) , file = finfo)
+			print("\ttrain" + str(i+1) + "Err    :" + str(ErrCount[i]) , file = finfo)
+			print("\ttrain" + str(i+1) + "AUC    :" + str(ModelMetrics[i].areaUnderROC) , file = finfo)#
+			print("\ttrain" + str(i+1) + "APR    :" + str(ModelMetrics[i].areaUnderPR) , file = finfo)#
+		print("Validation       :" + str(ValidtionCount) , file = finfo)
+		print("MinimumErrorCount:" + str(min(ErrCount)) , file = finfo)
+		print("MinimumErrorRate :" + str(float(min(ErrCount)) / ValidtionCount * 100) + "%" , file = finfo)
+		print("ModelingDuration :"+str(ModelingDuration) , file = finfo)
+		print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
 	'''fail while give parameter2 == (AnyPath + "\\info.txt"))'''
 	
 	for i in range(len(PredictionsAndLabels)):
-		fPrediction = open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a')
-		for (prediction, label) in PredictionsAndLabels[i].collect():
-			fPrediction.write(str(prediction) + "," + str(label) + "\n")
-		fPrediction.close()
+		with open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a') as fPrediction:
+			for (prediction, label) in PredictionsAndLabels[i].collect():
+				print(str(prediction) + "," + str(label), file=fPrediction)
 	
 	print("============= Printing ===============" + gettime(time()))
 	print("DataSplit        :none(WHOLE)")
@@ -161,4 +151,3 @@ if __name__ == "__main__":
 	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
 	sc.stop()
-    
