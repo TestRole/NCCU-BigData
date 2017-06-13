@@ -4,10 +4,11 @@ from __future__ import print_function
 from pyspark import SparkConf, SparkContext
 from time import time, strftime, localtime
 import os, sys
+from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
 from pyspark.mllib.feature import Normalizer as NL
 from pyspark.mllib.feature import PCA, StandardScaler, StandardScalerModel
-from pyspark.mllib.tree import RandomForest, RandomForestModel
+from pyspark.mllib.tree import RandomForest, RandomForestModel, GradientBoostedTrees, GradientBoostedTreesModel
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
@@ -16,6 +17,7 @@ from pyspark.mllib.util import MLUtils
 DataSplit='ALL'
 
 PredictLABEL = 'booking'	#	'booking' OR 'click'
+algorithmMETHOD = 'GBT'	# RF, GBT or NB
 #==Tree Parameters==
 NumTrees = 15 #Bigger you set, longer your program run.
 NumMaxTreeDepth = 10 #max is 30, if it set to high, it could cause memory run out.
@@ -92,7 +94,7 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	f = f.map(lambda x:\
 		      ([x[1].split()[0].split('-')[0] , x[1].split()[0].split('-')[1] , x[1].split()[0].split('-')[2]] + \
 			   [int(x[1].split()[1].split(':')[0]) * 3600 +int(x[1].split()[1].split(':')[1]) *60 + int(x[1].split()[1].split(':')[2]) ] + \
-         x[2:-3]+ \
+			   x[2:-3]+ \
 			   list(x[-3]) + list(x[-1])
 			 ))
 		#no need to trans 2 float cause mllib.regression will do that
@@ -100,6 +102,7 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 		f = f.map(lambda x: LabeledPoint(x[-1] , x[2:-2]))	#x[-1] is booking
 	else:
 		f = f.map(lambda x: LabeledPoint(x[-2] , x[2:-2]))	#x[-2] is click
+	# print (f.first().features)
 	return f
 
 def ModelPredict(model, dataset):
@@ -127,9 +130,17 @@ if __name__ == "__main__":
 	elif (feature_Engineering == 'PCA'):
 		trainlpRDDs = PCAer(trainlpRDDs)
 	print("============= Training ===============" + gettime(time()))
-	model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
-										  numTrees=NumTrees, featureSubsetStrategy="auto",\
-										  impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
+	if (algorithmMETHOD == 'RF'):
+		model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
+											  numTrees=NumTrees, featureSubsetStrategy="auto",\
+											  impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
+	# NaiveBayes
+	elif (algorithmMETHOD == 'NB'):
+		model = NaiveBayes.train(trainlpRDDs , 1.0)
+	elif (algorithmMETHOD == 'GBT'):
+		model = GradientBoostedTrees.trainClassifier(trainlpRDDs, categoricalFeaturesInfo={},\
+							maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=0.1, numIterations=100)
+											 
 	print("============= Predicting =============" + gettime(time()))
 	prediction = model.predict(testlpRDD.map(lambda x: x.features))
 
@@ -146,6 +157,7 @@ if __name__ == "__main__":
 	with open('info.txt' , 'a') as finfo:
 		print(str(gettime(StartTime)) , file = finfo)
 		print("Label                 :" + PredictLABEL , file=finfo)
+		print('Method:               :' + algorithmMETHOD , file = finfo)
 		print("DataSplit             :" + DataSplit , file = finfo)
 		print("FeatureEngineer       :" + feature_Engineering , file = finfo)
 		print("NumTrees              :" + str(NumTrees), file = finfo)
@@ -166,6 +178,7 @@ if __name__ == "__main__":
 	'''
 	print("============= Printing ===============" + gettime(time()))
 	print("Label                 :" + PredictLABEL)
+	print('Method:               :' + algorithmMETHOD)
 	print("DataSplit             :" + DataSplit)
 	print("FeatureEngineer       :" + feature_Engineering)
 	print("NumTrees              :" + str(NumTrees))
