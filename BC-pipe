@@ -1,0 +1,184 @@
+###### -*- coding: ASCII -*-
+#REF:https://github.com/apache/spark/blob/master/examples/src/main/python/mllib/binary_classification_metrics_example.py
+from __future__ import print_function
+from pyspark import SparkConf, SparkContext
+from time import time, strftime, localtime
+import os, sys
+from pyspark.mllib.evaluation import BinaryClassificationMetrics
+from pyspark.mllib.feature import Normalizer as NL
+from pyspark.mllib.feature import PCA, StandardScaler, StandardScalerModel
+from pyspark.mllib.tree import RandomForest, RandomForestModel
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.util import MLUtils
+
+#if you take the 100m-splited file, remember to modify here.
+DataSplit='ALL'
+
+PredictLABEL = 'booking'	#	'booking' OR 'click'
+#==Tree Parameters==
+NumTrees = 15 #Bigger you set, longer your program run.
+NumMaxTreeDepth = 10 #max is 30, if it set to high, it could cause memory run out.
+NumMaxTreeBins = 32
+#==Feature Engineering Setting==
+feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
+normalize_P = '2'	#as Default
+NumPCA = 30 # if it doesn't work, decrease its value.
+#==File imported==
+# FILE = '/home/user/Desktop/train_100m.csv'
+FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
+# FILE = 'D:/dataset/kaggle_expedia-personalized-sort/train.csv'	#for my poor Laptop
+
+def CreateSparkContext():
+    sparkConf = SparkConf()                                            \
+                         .setAppName("NCCUBigDataProjFinal-pipe")           \
+                         .set("spark.ui.showConsoleProgress", "false") 
+    sc = SparkContext(conf = sparkConf)
+    print ("master="+sc.master)    
+    SetLogger(sc)
+#    SetPath(sc)
+    return (sc)
+
+def SetLogger(sc):
+    logger = sc._jvm.org.apache.log4j
+    logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
+    logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
+    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
+
+'''
+	def SetPath(sc):
+		global Path
+		if sc.master[0:5]=="local" :
+			Path="file:/home/cs/Demo/"
+		else:   
+			Path="hdfs://master:9000/data/"
+'''
+
+def gettime(t = time(), method = ""):
+	if(method == "f"):	#f means floder
+		return strftime("%Y-%m-%d-%H-%M-%S(+0800)", localtime(t))
+	else:
+		return strftime("%Y-%m-%d %H:%M:%S(+0800)", localtime(t))
+
+def normalizer(LPRDD, P=normalize_P):
+	lpF = LPRDD.map(lambda x : x.features)
+	lpL = LPRDD.map(lambda x : x.label)
+	nl = NL(p=P) # 
+	return lpL.zip(nl.transform(lpF)).map(lambda x: LabeledPoint(x[0],x[1]))
+
+def PCAer(LPRDD, P=NumPCA):
+	lpF = LPRDD.map(lambda x : x.features)
+	lpL = LPRDD.map(lambda x : x.label)
+	model = PCA(P).fit(lpF)
+	PCAed = model.transform(lpF)
+	return lpL.zip(PCAed).map(lambda x: LabeledPoint(x[0],x[1]))
+
+def StandardScaler(LPRDD):
+	lpF = LPRDD.map(lambda x : x.features)
+	lpL = LPRDD.map(lambda x : x.label)
+	model =StandardScaler().fit(lpF)
+	scalered = model.transform(lpF)
+	return lpL.zip(scalered).map(lambda x: LabeledPoint(x[0],x[1]))
+
+def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
+	# replace"NULL" by -2 to make it a unique feature
+	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','-2')) #GIVE -2 to distinguish null
+	# delete the header
+	header = f.first()
+	# split by ','
+	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))\
+	    # Dealing with x[1] = Date&Time
+		#ALL BUGs came from here
+	f = f.map(lambda x:\
+		      ([x[1].split()[0].split('-')[0] , x[1].split()[0].split('-')[1] , x[1].split()[0].split('-')[2]] + \
+			   [int(x[1].split()[1].split(':')[0]) * 3600 +int(x[1].split()[1].split(':')[1]) *60 + int(x[1].split()[1].split(':')[2]) ] + \
+         x[2:-3]+ \
+			   list(x[-3]) + list(x[-1])
+			 ))
+		#no need to trans 2 float cause mllib.regression will do that
+	if LABEL == 'booking':
+		f = f.map(lambda x: LabeledPoint(x[-1] , x[2:-2]))	#x[-1] is booking
+	else:
+		f = f.map(lambda x: LabeledPoint(x[-2] , x[2:-2]))	#x[-2] is click
+	return f
+
+def ModelPredict(model, dataset):
+	return model.predict(dataset.map(lambda x: x.features))
+
+def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
+	if (option == 's'):
+		model.save(sc, folder)
+	elif (option == 'l'):
+		return LogisticRegressionModel.load(sc, folder)
+
+if __name__ == "__main__":
+	sc = CreateSparkContext()
+	StartTime = time()
+	SavePath = gettime(StartTime, "f")
+
+	print("============= Loading ================" + gettime(time()))
+	f = LoadAndPrepare(FILE, PredictLABEL)
+	(trainlpRDDs, testlpRDD) = f.randomSplit([80, 20])
+	# 3 feature engineer
+	if (feature_Engineering == 'StandardScaler'):
+		trainlpRDDs = StandardScaler(trainlpRDDs)
+	elif (feature_Engineering == 'Normalizer'):
+		trainlpRDDs = normalizer(trainlpRDDs)
+	elif (feature_Engineering == 'PCA'):
+		trainlpRDDs = PCAer(trainlpRDDs)
+	print("============= Training ===============" + gettime(time()))
+	model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
+										  numTrees=NumTrees, featureSubsetStrategy="auto",\
+										  impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
+	print("============= Predicting =============" + gettime(time()))
+	prediction = model.predict(testlpRDD.map(lambda x: x.features))
+
+	print("============= Computing ==============" + gettime(time()))
+	PredictionsAndLabel = prediction.zip(testlpRDD.map(lambda lp: lp.label))
+	ErrCount = PredictionsAndLabel.filter(lambda lp: (lp[0] != lp[1])).count()
+	ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
+	trainCount= trainlpRDDs.count()
+	TestCount = testlpRDD.count()
+	
+	ModelingDuration = time() - StartTime
+	
+	print("============= Saving =================" + gettime(time()))
+	with open('info.txt' , 'a') as finfo:
+		print(str(gettime(StartTime)) , file = finfo)
+		print("Label                 :" + PredictLABEL , file=finfo)
+		print("DataSplit             :" + DataSplit , file = finfo)
+		print("FeatureEngineer       :" + feature_Engineering , file = finfo)
+		print("NumTrees              :" + str(NumTrees), file = finfo)
+		print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
+		print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
+		print("train                 :" + str(trainCount) , file = finfo)
+		print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
+		print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
+		print("ErrorCount            :" + str(ErrCount) , file = finfo)
+		print("ErrorRate             :" + str(ErrCount / TestCount * 100) + "%" , file = finfo)
+		print("ModelingDuration      :"+str(ModelingDuration) , file = finfo)
+		print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
+	'''
+	for i in range(len(PredictionsAndLabels)):
+		with open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a') as fPrediction:
+			for (prediction, label) in PredictionsAndLabels[i].collect():
+				print(str(prediction) + "," + str(label), file=fPrediction)
+	'''
+	print("============= Printing ===============" + gettime(time()))
+	print("Label                 :" + PredictLABEL)
+	print("DataSplit             :" + DataSplit)
+	print("FeatureEngineer       :" + feature_Engineering)
+	print("NumTrees              :" + str(NumTrees))
+	print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
+	print("MaxTreeBins           :" + str(NumMaxTreeBins))
+	print("train                 :" + str(trainCount))
+	print("AUC                   :" + str(ModelMetric.areaUnderROC))
+	print("APR                   :" + str(ModelMetric.areaUnderPR))
+	print("ErrorCount            :" + str(ErrCount))
+	print("ErrorRate             :" + str(float(ErrCount) / float(TestCount) * 100) + "%")
+	print("ModelingDuration      :"+str(ModelingDuration))
+
+	print("============= Done ===================" + gettime(time()))
+	print("TotalDuration :"+str(time()-StartTime))
+	sc.stop()
+    
