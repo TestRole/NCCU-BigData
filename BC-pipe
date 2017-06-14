@@ -17,10 +17,10 @@ from pyspark.mllib.util import MLUtils
 DataSplit='ALL'
 
 PredictLABEL = 'booking'	#	'booking' OR 'click'
-algorithmMETHOD = 'GBT'	# RF, GBT, NB or DT
+algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
 #==Tree Parameters==
 NumTrees = 5 #Bigger you set, longer your program run.
-NumMaxTreeDepth = 50 #max is 30, if it set to high, it could cause memory run out.
+NumMaxTreeDepth = 18 #max is 30, if it set to high, it could cause memory run out.
 NumMaxTreeBins = 32
 LearningRate = 0.5
 #==Feature Engineering Setting==
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 		model = GradientBoostedTrees.trainClassifier(trainlpRDDs, categoricalFeaturesInfo={},\
 						maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=LearningRate, numIterations=NumTrees)
 	elif (algorithmMETHOD == 'DT'):
-		model = DecisionTree.trainClassifier(trainlRDDs, numClasses=2, categoricalFeaturesInfo={},
+		model = DecisionTree.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},
                                      impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
 
 											 
