@@ -14,21 +14,22 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
 
 #if you take the 100m-splited file, remember to modify here.
-DataSplit='15m'
+DataSplit='ALL'
 
 PredictLABEL = 'booking'	#	'booking' OR 'click'
 algorithmMETHOD = 'GBT'	# RF, GBT or NB
 #==Tree Parameters==
-NumTrees = 15 #Bigger you set, longer your program run.
+NumTrees = 5 #Bigger you set, longer your program run.
 NumMaxTreeDepth = 10 #max is 30, if it set to high, it could cause memory run out.
 NumMaxTreeBins = 32
+LearningRate = 0.5
 #==Feature Engineering Setting==
 feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
 normalize_P = '2'	#as Default
 NumPCA = 30 # if it doesn't work, decrease its value.
 #==File imported==
 # FILE = '/home/user/Desktop/train_100m.csv'
-FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	#for my PC @ home
+FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
 # FILE = 'D:/dataset/kaggle_expedia-personalized-sort/train.csv'	#for my poor Laptop
 
 def CreateSparkContext():
@@ -88,20 +89,21 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	# delete the header
 	header = f.first()
 	# split by ','
-	f = f.filter(lambda x: x != header).map(lambda x:x.split(","))\
+	f = f.filter(lambda x: x != header).map(lambda x : x.split(","))
 	    # Dealing with x[1] = Date&Time
 		#ALL BUGs came from here
+	print (f.first())
 	f = f.map(lambda x:\
-		      ([x[1].split()[0].split('/')[0] , int(x[1].split()[0].split('/')[1]) * 30 + int(x[1].split()[0].split('/')[2])] + \
+		      ([ int(x[1].split()[0].split('-')[0]) - 2013 + ( float(x[1].split()[0].split('-')[1]) * 30 + int(x[1].split()[0].split('-')[2])) / 365 ] + \
 			   [int(x[1].split()[1].split(':')[0]) * 60 + int(x[1].split()[1].split(':')[1]) ] + \
 			   x[2:-3] + \
-			   list(x[-3]) + list(x[-1])
+			   [x[-3] , x[-1]]
 			 ))
 		#no need to trans 2 float cause mllib.regression will do that
 	if LABEL == 'booking':
-		f = f.map(lambda x: LabeledPoint(x[-1] , x[2:-2]))	#x[-1] is booking
+		f = f.map(lambda x: LabeledPoint(x[-1] , x[:-2]))	#x[-1] is booking
 	else:
-		f = f.map(lambda x: LabeledPoint(x[-2] , x[2:-2]))	#x[-2] is click
+		f = f.map(lambda x: LabeledPoint(x[-2] , x[:-2]))	#x[-2] is click
 	print (f.first().features)
 	return f
 
@@ -139,7 +141,7 @@ if __name__ == "__main__":
 		model = NaiveBayes.train(trainlpRDDs , 1.0)
 	elif (algorithmMETHOD == 'GBT'):
 		model = GradientBoostedTrees.trainClassifier(trainlpRDDs, categoricalFeaturesInfo={},\
-							maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=0.1, numIterations=100)
+							maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=LearningRate, numIterations=NumTrees)
 											 
 	print("============= Predicting =============" + gettime(time()))
 	prediction = model.predict(testlpRDD.map(lambda x: x.features))
@@ -163,6 +165,7 @@ if __name__ == "__main__":
 		print("NumTrees              :" + str(NumTrees), file = finfo)
 		print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
 		print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
+		print("LearningRate          :" + str(LearningRate) , file = finfo)
 		print("train                 :" + str(trainCount) , file = finfo)
 		print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
 		print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
