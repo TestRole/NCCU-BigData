@@ -14,7 +14,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
 
 #if you take the 100m-splited file, remember to modify here.
-DataSplit='ALL'
+DataSplit='15m'
 
 PredictLABEL = 'booking'	#	'booking' OR 'click'
 algorithmMETHOD = 'GBT'	# RF, GBT or NB
@@ -28,7 +28,7 @@ normalize_P = '2'	#as Default
 NumPCA = 30 # if it doesn't work, decrease its value.
 #==File imported==
 # FILE = '/home/user/Desktop/train_100m.csv'
-FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
+FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	#for my PC @ home
 # FILE = 'D:/dataset/kaggle_expedia-personalized-sort/train.csv'	#for my poor Laptop
 
 def CreateSparkContext():
@@ -75,7 +75,7 @@ def PCAer(LPRDD, P=NumPCA):
 	PCAed = model.transform(lpF)
 	return lpL.zip(PCAed).map(lambda x: LabeledPoint(x[0],x[1]))
 
-def StandardScaler(LPRDD):
+def StandardScaleR(LPRDD):
 	lpF = LPRDD.map(lambda x : x.features)
 	lpL = LPRDD.map(lambda x : x.label)
 	model =StandardScaler().fit(lpF)
@@ -92,9 +92,9 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	    # Dealing with x[1] = Date&Time
 		#ALL BUGs came from here
 	f = f.map(lambda x:\
-		      ([x[1].split()[0].split('-')[0] , x[1].split()[0].split('-')[1] , x[1].split()[0].split('-')[2]] + \
-			   [int(x[1].split()[1].split(':')[0]) * 3600 +int(x[1].split()[1].split(':')[1]) *60 + int(x[1].split()[1].split(':')[2]) ] + \
-			   x[2:-3]+ \
+		      ([x[1].split()[0].split('/')[0] , int(x[1].split()[0].split('/')[1]) * 30 + int(x[1].split()[0].split('/')[2])] + \
+			   [int(x[1].split()[1].split(':')[0]) * 60 + int(x[1].split()[1].split(':')[1]) ] + \
+			   x[2:-3] + \
 			   list(x[-3]) + list(x[-1])
 			 ))
 		#no need to trans 2 float cause mllib.regression will do that
@@ -102,7 +102,7 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 		f = f.map(lambda x: LabeledPoint(x[-1] , x[2:-2]))	#x[-1] is booking
 	else:
 		f = f.map(lambda x: LabeledPoint(x[-2] , x[2:-2]))	#x[-2] is click
-	# print (f.first().features)
+	print (f.first().features)
 	return f
 
 def ModelPredict(model, dataset):
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 	(trainlpRDDs, testlpRDD) = f.randomSplit([80, 20])
 	# 3 feature engineer
 	if (feature_Engineering == 'StandardScaler'):
-		trainlpRDDs = StandardScaler(trainlpRDDs)
+		trainlpRDDs = StandardScaleR(trainlpRDDs)
 	elif (feature_Engineering == 'Normalizer'):
 		trainlpRDDs = normalizer(trainlpRDDs)
 	elif (feature_Engineering == 'PCA'):
@@ -156,7 +156,7 @@ if __name__ == "__main__":
 	print("============= Saving =================" + gettime(time()))
 	with open('info.txt' , 'a') as finfo:
 		print(str(gettime(StartTime)) , file = finfo)
-		print("Label                 :" + PredictLABEL , file=finfo)
+		print("Label                 :" + PredictLABEL , file = finfo)
 		print('Method:               :' + algorithmMETHOD , file = finfo)
 		print("DataSplit             :" + DataSplit , file = finfo)
 		print("FeatureEngineer       :" + feature_Engineering , file = finfo)
@@ -167,9 +167,10 @@ if __name__ == "__main__":
 		print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
 		print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
 		print("ErrorCount            :" + str(ErrCount) , file = finfo)
-		print("ErrorRate             :" + str(ErrCount / TestCount * 100) + "%" , file = finfo)
-		print("ModelingDuration      :"+str(ModelingDuration) , file = finfo)
+		print("ErrorRate             :" + str(float(ErrCount) / TestCount * 100) + "%" , file = finfo)
+		print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
 		print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
+		print("Tree                  :" + model.toDebugString() , file = finfo)
 	'''
 	for i in range(len(PredictionsAndLabels)):
 		with open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a') as fPrediction:
