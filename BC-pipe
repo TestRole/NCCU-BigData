@@ -13,24 +13,26 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
 
-#if you take the 100m-splited file, remember to modify here.
-DataSplit='ALL'
+# Globol Parameters Here
+if True:
+	# if you take the 100m-splited file, remember to modify here.
+	DataSplit='ALL'
 
-PredictLABEL = 'booking'	#	'booking' OR 'click'
-algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
-#==Tree Parameters==
-NumTrees = 5 #Bigger you set, longer your program run.
-NumMaxTreeDepth = 18 #max is 30, if it set to high, it could cause memory run out.
-NumMaxTreeBins = 32
-LearningRate = 0.5
-#==Feature Engineering Setting==
-feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
-normalize_P = '2'	#as Default
-NumPCA = 30 # if it doesn't work, decrease its value.
-#==File imported==
-# FILE = '/home/user/Desktop/train_100m.csv'
-FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
-# FILE = 'D:/dataset/kaggle_expedia-personalized-sort/train.csv'	#for my poor Laptop
+	PredictLABEL = 'click'	#	'booking' OR 'click'
+	algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
+	# ==Tree Parameters==
+	NumTrees = 20 #Bigger you set, longer your program run.
+	NumMaxTreeDepth = 15 #max is 30, if it set to high, it could cause memory run out.
+	NumMaxTreeBins = 32
+	LearningRate = 0.5
+	# ==Feature Engineering Setting==
+	feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
+	normalize_P = '2'	#as Default
+	NumPCA = 30 # if it doesn't work, decrease its value.
+	# ==File imported==
+	# FILE = '/home/user/Desktop/train_100m.csv'
+	FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
+	# FILE = 'D:\\dataset\\expedia\\train_15m.csv'	#for my poor Laptop
 
 def CreateSparkContext():
     sparkConf = SparkConf()                                            \
@@ -55,13 +57,28 @@ def SetLogger(sc):
 			Path="file:/home/cs/Demo/"
 		else:   
 			Path="hdfs://master:9000/data/"
-'''
 
+# Logistic Regression only
+def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
+	if (option == 's'):
+		model.save(sc, folder)
+	elif (option == 'l'):
+		return LogisticRegressionModel.load(sc, folder)
+'''
 def gettime(t = time(), method = ""):
 	if(method == "f"):	#f means floder
 		return strftime("%Y-%m-%d-%H-%M-%S(+0800)", localtime(t))
 	else:
 		return strftime("%Y-%m-%d %H:%M:%S(+0800)", localtime(t))
+
+def FeaTureEngineerer(lpRDD):
+	if (feature_Engineering == 'StandardScaler'):
+		lpRDD = StandardScaleR(trainlpRDDs)
+	elif (feature_Engineering == 'Normalizer'):
+		lpRDD = normalizer(trainlpRDDs)
+	elif (feature_Engineering == 'PCA'):
+		lpRDD = PCAer(trainlpRDDs)
+	return lpRDD
 
 def normalizer(LPRDD, P=normalize_P):
 	lpF = LPRDD.map(lambda x : x.features)
@@ -90,13 +107,19 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	header = f.first()
 	# split by ','
 	f = f.filter(lambda x: x != header).map(lambda x : x.split(","))
-	    # Dealing with x[1] = Date&Time
-		#ALL BUGs came from here
-	print (f.first())
+
+	# print (f.first())
+	
+	# f1 = f.map(lambda x:(x[6] , x[15]))reduceByKey(lambda (x,y): (float(x) + float(y))/2  )
+	# f2 = f.map(lambda x:(x[6] , x[15]))reduceByKey(lambda (x,y): (float(x) + float(y))/2  )
+	# Dealing with x[1] = Date&Time
+	# Count the whole competitors
 	f = f.map(lambda x:\
 		      ([ int(x[1].split()[0].split('-')[0]) - 2013 + ( float(x[1].split()[0].split('-')[1]) * 30 + int(x[1].split()[0].split('-')[2])) / 365 ] + \
 			   [int(x[1].split()[1].split(':')[0]) * 60 + int(x[1].split()[1].split(':')[1]) ] + \
 			   x[2:-3] + \
+			   [ sum(1 for a in x[27:51] if int(a) == -2) ] + \
+			   [ (float(x[9]) - float(x[5])) / float(x[5])   if float(x[5]) !=0 else 100   ] + \
 			   [x[-3] , x[-1]]
 			 ))
 		#no need to trans 2 float cause mllib.regression will do that
@@ -107,15 +130,6 @@ def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	print (f.first().features)
 	return f
 
-def ModelPredict(model, dataset):
-	return model.predict(dataset.map(lambda x: x.features))
-
-def SaveOrLoadModel(model = "" , folder = ("model_" + str(time())) , option = 's'):
-	if (option == 's'):
-		model.save(sc, folder)
-	elif (option == 'l'):
-		return LogisticRegressionModel.load(sc, folder)
-
 if __name__ == "__main__":
 	sc = CreateSparkContext()
 	StartTime = time()
@@ -125,12 +139,8 @@ if __name__ == "__main__":
 	f = LoadAndPrepare(FILE, PredictLABEL)
 	(trainlpRDDs, testlpRDD) = f.randomSplit([80, 20])
 	# 3 feature engineer
-	if (feature_Engineering == 'StandardScaler'):
-		trainlpRDDs = StandardScaleR(trainlpRDDs)
-	elif (feature_Engineering == 'Normalizer'):
-		trainlpRDDs = normalizer(trainlpRDDs)
-	elif (feature_Engineering == 'PCA'):
-		trainlpRDDs = PCAer(trainlpRDDs)
+	trainlpRDDs = FeaTureEngineerer(trainlpRDDs)
+
 	print("============= Training ===============" + gettime(time()))
 	if (algorithmMETHOD == 'RF'):
 		model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
@@ -146,7 +156,8 @@ if __name__ == "__main__":
 		model = DecisionTree.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},
                                      impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
 
-											 
+	ModelingDuration = time() - StartTime
+	
 	print("============= Predicting =============" + gettime(time()))
 	prediction = model.predict(testlpRDD.map(lambda x: x.features))
 
@@ -156,8 +167,7 @@ if __name__ == "__main__":
 	ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
 	trainCount= trainlpRDDs.count()
 	TestCount = testlpRDD.count()
-	
-	ModelingDuration = time() - StartTime
+	ErrRate = float(ErrCount) / TestCount * 100
 	
 	print("============= Saving =================" + gettime(time()))
 	with open('info.txt' , 'a') as finfo:
@@ -166,15 +176,18 @@ if __name__ == "__main__":
 		print('Method:               :' + algorithmMETHOD , file = finfo)
 		print("DataSplit             :" + DataSplit , file = finfo)
 		print("FeatureEngineer       :" + feature_Engineering , file = finfo)
-		print("NumTrees              :" + str(NumTrees), file = finfo)
-		print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
-		print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
-		print("LearningRate          :" + str(LearningRate) , file = finfo)
+		if algorithmMETHOD == 'GBT' or algorithmMETHOD == 'RF':
+			print("NumTrees              :" + str(NumTrees), file = finfo)
+		if algorithmMETHOD != 'NB':
+			print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
+			print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
+		if algorithmMETHOD == 'GBT':
+			print("LearningRate          :" + str(LearningRate) , file = finfo)
 		print("train                 :" + str(trainCount) , file = finfo)
 		print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
 		print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
 		print("ErrorCount            :" + str(ErrCount) , file = finfo)
-		print("ErrorRate             :" + str(float(ErrCount) / TestCount * 100) + "%" , file = finfo)
+		print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
 		print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
 		print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
 		print("Tree                  :" + model.toDebugString() , file = finfo)
@@ -189,15 +202,16 @@ if __name__ == "__main__":
 	print('Method:               :' + algorithmMETHOD)
 	print("DataSplit             :" + DataSplit)
 	print("FeatureEngineer       :" + feature_Engineering)
-	print("NumTrees              :" + str(NumTrees))
-	print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
-	print("MaxTreeBins           :" + str(NumMaxTreeBins))
+	if algorithmMETHOD != 'NB':
+		print("NumTrees              :" + str(NumTrees))
+		print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
+		print("MaxTreeBins           :" + str(NumMaxTreeBins))
 	print("train                 :" + str(trainCount))
 	print("AUC                   :" + str(ModelMetric.areaUnderROC))
 	print("APR                   :" + str(ModelMetric.areaUnderPR))
 	print("ErrorCount            :" + str(ErrCount))
-	print("ErrorRate             :" + str(float(ErrCount) / float(TestCount) * 100) + "%")
-	print("ModelingDuration      :"+str(ModelingDuration))
+	print("ErrorRate             :" + str(ErrRate) + "%")
+	print("ModelingDuration      :" + str(ModelingDuration))
 
 	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
