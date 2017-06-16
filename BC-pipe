@@ -18,11 +18,11 @@ if True:
 	# if you take the 100m-splited file, remember to modify here.
 	DataSplit='ALL'
 
-	PredictLABEL = 'click'	#	'booking' OR 'click'
-	algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
+	PredictLABEL = 'booking'	#	'booking' OR 'click'
+	algorithmMETHOD = 'RF'	# RF, GBT, NB or DT
 	# ==Tree Parameters==
 	NumTrees = 20 #Bigger you set, longer your program run.
-	NumMaxTreeDepth = 15 #max is 30, if it set to high, it could cause memory run out.
+	NumMaxTreeDepth = 10 #max is 30, if it set to high, it could cause memory run out.
 	NumMaxTreeBins = 32
 	LearningRate = 0.5
 	# ==Feature Engineering Setting==
@@ -216,4 +216,3 @@ if __name__ == "__main__":
 	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
 	sc.stop()
-    
