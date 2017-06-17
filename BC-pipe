@@ -16,39 +16,39 @@ from pyspark.mllib.util import MLUtils
 # Globol Parameters Here
 if True:
 	# if you take the 100m-splited file, remember to modify here.
-	DataSplit='ALL'
-
+	DataSplit='15m_balanced_95/5'
+	# *****Main Parameters*****
 	PredictLABEL = 'booking'	#	'booking' OR 'click'
-	algorithmMETHOD = 'RF'	# RF, GBT, NB or DT
-	# ==Tree Parameters==
-	NumTrees = 20 #Bigger you set, longer your program run.
-	NumMaxTreeDepth = 10 #max is 30, if it set to high, it could cause memory run out.
+	algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
+	# *****Tree Parameters*****
+	NumTrees = 10 #Bigger you set, longer your program run.
+	NumMaxTreeDepth = 15 #max is 30, if it set to high, it could cause memory run out.
 	NumMaxTreeBins = 32
 	LearningRate = 0.5
-	# ==Feature Engineering Setting==
+	# *****Feature Engineering Setting*****
 	feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
 	normalize_P = '2'	#as Default
 	NumPCA = 30 # if it doesn't work, decrease its value.
-	# ==File imported==
+	# *****File imported*****
 	# FILE = '/home/user/Desktop/train_100m.csv'
-	FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train.csv'	#for my PC @ home
+	FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	#for my PC @ home
 	# FILE = 'D:\\dataset\\expedia\\train_15m.csv'	#for my poor Laptop
 
 def CreateSparkContext():
-    sparkConf = SparkConf()                                            \
-                         .setAppName("NCCUBigDataProjFinal-pipe")           \
-                         .set("spark.ui.showConsoleProgress", "false") 
-    sc = SparkContext(conf = sparkConf)
-    print ("master="+sc.master)    
-    SetLogger(sc)
+	sparkConf = SparkConf()                                            \
+						 .setAppName("NCCUBigDataProjFinal-pipe")           \
+						 .set("spark.ui.showConsoleProgress", "false") 
+	sc = SparkContext(conf = sparkConf)
+	print ("master="+sc.master)    
+	SetLogger(sc)
 #    SetPath(sc)
-    return (sc)
+	return (sc)
 
 def SetLogger(sc):
-    logger = sc._jvm.org.apache.log4j
-    logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
-    logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
-    logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
+	logger = sc._jvm.org.apache.log4j
+	logger.LogManager.getLogger("org"). setLevel( logger.Level.ERROR )
+	logger.LogManager.getLogger("akka").setLevel( logger.Level.ERROR )
+	logger.LogManager.getRootLogger().setLevel(logger.Level.ERROR)
 
 '''
 	def SetPath(sc):
@@ -71,15 +71,6 @@ def gettime(t = time(), method = ""):
 	else:
 		return strftime("%Y-%m-%d %H:%M:%S(+0800)", localtime(t))
 
-def FeaTureEngineerer(lpRDD):
-	if (feature_Engineering == 'StandardScaler'):
-		lpRDD = StandardScaleR(trainlpRDDs)
-	elif (feature_Engineering == 'Normalizer'):
-		lpRDD = normalizer(trainlpRDDs)
-	elif (feature_Engineering == 'PCA'):
-		lpRDD = PCAer(trainlpRDDs)
-	return lpRDD
-
 def normalizer(LPRDD, P=normalize_P):
 	lpF = LPRDD.map(lambda x : x.features)
 	lpL = LPRDD.map(lambda x : x.label)
@@ -100,35 +91,108 @@ def StandardScaleR(LPRDD):
 	scalered = model.transform(lpF)
 	return lpL.zip(scalered).map(lambda x: LabeledPoint(x[0],x[1]))
 
+def FeaTureEngineerer(lpRDD):
+	if (feature_Engineering == 'StandardScaler'):
+		lpRDD = StandardScaleR(trainlpRDDs)
+	elif (feature_Engineering == 'Normalizer'):
+		lpRDD = normalizer(trainlpRDDs)
+	elif (feature_Engineering == 'PCA'):
+		lpRDD = PCAer(trainlpRDDs)
+	return lpRDD
+
+def MeanByKey(lpRDD, index_K, index_V):
+	return lpRDD.map(lambda x:(x[index_K] , x[index_V])).reduceByKey(lambda x,y: (float(x) + float(y))/2  )
+
+def DictMedianByKey(lpRDD, index_K, index_V):
+	Dict = {}
+	# x, y should be trans 2 strings
+	# the Keys will be string @ final
+	# the Value will be float @ final
+	lpRDD = lpRDD.map(lambda x:(x[index_K] , x[index_V]))
+	lpRDD = lpRDD.reduceByKey(lambda x,y :(str(x) + ',' + str(y)))
+	lpRDD = lpRDD.map(lambda x:(x[0], sorted(list(float(a) for a in x[1].split(',')))))
+	lpRDD = lpRDD.map(lambda x :(x[0], x[1][len(x[1])/2]))
+	for (k, v) in lpRDD.collect():
+		Dict[k] = v
+	return Dict
+	
 def LoadAndPrepare(dataset=FILE, LABEL = PredictLABEL):
 	# replace"NULL" by -2 to make it a unique feature
-	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','-2')) #GIVE -2 to distinguish null
 	# delete the header
-	header = f.first()
 	# split by ','
+	f = sc.textFile(dataset).map(lambda x: str(x).replace('NULL','-2')) #GIVE -2 to distinguish null
+	header = f.first()
 	f = f.filter(lambda x: x != header).map(lambda x : x.split(","))
-
-	# print (f.first())
+	print (f.first())
 	
-	# f1 = f.map(lambda x:(x[6] , x[15]))reduceByKey(lambda (x,y): (float(x) + float(y))/2  )
-	# f2 = f.map(lambda x:(x[6] , x[15]))reduceByKey(lambda (x,y): (float(x) + float(y))/2  )
+	# The mdeian price of the LOCATE country
+	DictLocalCtyPriceGap = DictMedianByKey(f, 3, 5)
+	# The mdeian price of the DESTINATION country
+	DictDestCtyPriceGap = DictMedianByKey(f, 6, 15)
+	# The mdeian price of the DESTINATION Site
+	DictDestPriceGap = DictMedianByKey(f, 17, 15)
+	# The mdeian price of the hotel ever
+	DictEverPriceGap = DictMedianByKey(f, 7, 15)
+	
+	# feature dealing & extension
 	# Dealing with x[1] = Date&Time
 	# Count the whole competitors
 	f = f.map(lambda x:\
 		      ([ int(x[1].split()[0].split('-')[0]) - 2013 + ( float(x[1].split()[0].split('-')[1]) * 30 + int(x[1].split()[0].split('-')[2])) / 365 ] + \
 			   [int(x[1].split()[1].split(':')[0]) * 60 + int(x[1].split()[1].split(':')[1]) ] + \
 			   x[2:-3] + \
+			   # feature[51], the competitor NULLs
 			   [ sum(1 for a in x[27:51] if int(a) == -2) ] + \
-			   [ (float(x[9]) - float(x[5])) / float(x[5])   if float(x[5]) !=0 else 100   ] + \
+			   # feature[52] , the gap (by percent) between the price searched and the searcher's expect
+			   [ (float(x[15]) - float(x[5])) / (float(x[5])  if float(x[5]) !=0 else 100)   ] + \
+			   # feature[53] , the gap (by percent) between the price searched and the median of Local Country
+			   [  ( float(x[15]) - DictEverPriceGap[x[7]] / (float(x[15])  if float(x[15]) !=0 else 100)  )] + \
+			   # feature[54] , the gap (by percent) between the price searched and the median of Local Country
+			   [  ( float(x[15]) - DictLocalCtyPriceGap[x[3]] / (float(x[15])  if float(x[15]) !=0 else 100)   )] + \
+			   # feature[55] , the gap (by percent) between the price searched and the median of destination Country
+			   [  ( float(x[15]) - DictDestCtyPriceGap[x[6]] / (float(x[15])  if float(x[15]) !=0 else 100)   )] + \
+			   # feature[56] , the gap (by percent) between the price searched and the median of destination site
+			   [  ( float(x[15]) - DictDestPriceGap[x[17]] / (float(x[15])  if float(x[15]) !=0 else 100)   )] + \
+			   # feature[57] , the gap (by percent) between the the median of Local Country and the median of destination Country
+			   [  ( (DictLocalCtyPriceGap[x[3]] - DictDestCtyPriceGap[x[6]]) / DictLocalCtyPriceGap[x[3]]  )] + \
+			   # feature[58] , the gap (by percent) between the the median of Local Country and the median of destination Country
+			   [  ( DictDestPriceGap[x[17]] - DictDestCtyPriceGap[x[6]] / DictDestCtyPriceGap[x[6]]  )] + \
+			   # feature[59] , the proportion of children
+			   # [   float(x[21]) / (float(x[20]) + float(x[21]))  if (float(x[20]) + float(x[21]) > 0) else -2 ] + \
+			   # Labels [60 & 61]
 			   [x[-3] , x[-1]]
 			 ))
-		#no need to trans 2 float cause mllib.regression will do that
+	f = f.map(lambda x:\
+		      (x[:3] + [  DictLocalCtyPriceGap[x[3]] ] + \
+			   x[4:6] + [ DictDestCtyPriceGap[x[6]] , DictEverPriceGap[x[7]] ] + \
+			   x[8:17] + [DictDestPriceGap[x[17]]] + \
+			   x[18:] \
+			 ))
+	#no need to trans 2 float cause mllib.regression will do that
+	print (f.first())
 	if LABEL == 'booking':
 		f = f.map(lambda x: LabeledPoint(x[-1] , x[:-2]))	#x[-1] is booking
 	else:
 		f = f.map(lambda x: LabeledPoint(x[-2] , x[:-2]))	#x[-2] is click
+	print (f.first().label)
 	print (f.first().features)
 	return f
+
+def ML(lpRDD, algo = algorithmMETHOD):
+	
+	if (algorithmMETHOD == 'RF'):
+		model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
+						numTrees=NumTrees, featureSubsetStrategy="auto",\
+						impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
+	elif (algorithmMETHOD == 'NB'):
+		model = NaiveBayes.train(trainlpRDDs , 1.0)
+	elif (algorithmMETHOD == 'GBT'):
+		model = GradientBoostedTrees.trainClassifier(trainlpRDDs, categoricalFeaturesInfo={},\
+						maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=LearningRate, numIterations=NumTrees)
+	elif (algorithmMETHOD == 'DT'):
+		model = DecisionTree.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},
+									 impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
+	return model
 
 if __name__ == "__main__":
 	sc = CreateSparkContext()
@@ -137,25 +201,20 @@ if __name__ == "__main__":
 
 	print("============= Loading ================" + gettime(time()))
 	f = LoadAndPrepare(FILE, PredictLABEL)
-	(trainlpRDDs, testlpRDD) = f.randomSplit([80, 20])
+	# Make 1s & 0s balanced.
+	
+	(droped, testlpRDD) = f.randomSplit([95, 5])
+	
+	d1s = droped.filter(lambda x: x.label == '1.0')
+	d0s = droped.filter(lambda x: x.label == '0.0')
+	(d0s_splited, droped) = droped.randomSplit([3, 97])
+	trainlpRDDs = d1s.union(d0s_splited)
+	
 	# 3 feature engineer
 	trainlpRDDs = FeaTureEngineerer(trainlpRDDs)
-
+	
 	print("============= Training ===============" + gettime(time()))
-	if (algorithmMETHOD == 'RF'):
-		model = RandomForest.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},\
-						numTrees=NumTrees, featureSubsetStrategy="auto",\
-						impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
-	# NaiveBayes
-	elif (algorithmMETHOD == 'NB'):
-		model = NaiveBayes.train(trainlpRDDs , 1.0)
-	elif (algorithmMETHOD == 'GBT'):
-		model = GradientBoostedTrees.trainClassifier(trainlpRDDs, categoricalFeaturesInfo={},\
-						maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins, learningRate=LearningRate, numIterations=NumTrees)
-	elif (algorithmMETHOD == 'DT'):
-		model = DecisionTree.trainClassifier(trainlpRDDs, numClasses=2, categoricalFeaturesInfo={},
-                                     impurity='gini', maxDepth=NumMaxTreeDepth, maxBins=NumMaxTreeBins)
-
+	model = ML(trainlpRDDs , algorithmMETHOD)
 	ModelingDuration = time() - StartTime
 	
 	print("============= Predicting =============" + gettime(time()))
@@ -216,3 +275,4 @@ if __name__ == "__main__":
 	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
 	sc.stop()
+	
