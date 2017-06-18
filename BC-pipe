@@ -254,7 +254,7 @@ if __name__ == "__main__":
 					print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
 					print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
 				with open('Trees.txt' , 'a') as ftree:
-					print(str(gettime(StartTime)) , file = finfo)
+					print(str(gettime(StartTime)) , file = ftree)
 					print("Tree                  :" + model.toDebugString() , file = ftree)
 					print("End of these trees!\n\n\n" , file = ftree)
 
