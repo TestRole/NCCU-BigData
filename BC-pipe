@@ -16,23 +16,24 @@ from pyspark.mllib.util import MLUtils
 # Globol Parameters Here
 if True:
 	# if you take the 100m-splited file, remember to modify here.
-	DataSplit='15m_balanced_95/5'
+	DataSplit='ALL_balanced_95/5'
 	# *****Main Parameters*****
 	PredictLABEL = 'booking'	#	'booking' OR 'click'
 	algorithmMETHOD = 'DT'	# RF, GBT, NB or DT
 	# *****Tree Parameters*****
-	NumTrees = 10 #Bigger you set, longer your program run.
-	NumMaxTreeDepth = 15 #max is 30, if it set to high, it could cause memory run out.
-	NumMaxTreeBins = 32
+	NumTrees = [10, 20, 30] #Bigger you set, longer your program run.
+	NumMaxTreeDepthPool = [20, 30] #max is 30, if it set to high, it could cause memory run out.
+	NumMaxTreeBinsPool = [30, 35, 40, 45, 50, 55, 60]
 	LearningRate = 0.5
 	# *****Feature Engineering Setting*****
 	feature_Engineering = 'none' # Normalizer, StandardScaler,  PCA or none.
 	normalize_P = '2'	#as Default
 	NumPCA = 30 # if it doesn't work, decrease its value.
 	# *****File imported*****
-	# FILE = '/home/user/Desktop/train_100m.csv'
-	FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	#for my PC @ home
-	# FILE = 'D:\\dataset\\expedia\\train_15m.csv'	#for my poor Laptop
+	# FILE = '/home/user/Desktop/train_100m.csv'							# The ubuntu VM
+	# FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	# for my PC @ home
+	# FILE = 'D:\\dataset\\expedia\\train_15m.csv'							# for my poor Laptop
+	FILE = 's3n://nccu-spark-big-data/train.csv'	# for spark ec2 ('s3n://' is for hadoop 2.6 earlier , for 2.7 and later use 's3a://')
 
 def CreateSparkContext():
 	sparkConf = SparkConf()                                            \
@@ -202,9 +203,7 @@ if __name__ == "__main__":
 	print("============= Loading ================" + gettime(time()))
 	f = LoadAndPrepare(FILE, PredictLABEL)
 	# Make 1s & 0s balanced.
-	
 	(droped, testlpRDD) = f.randomSplit([95, 5])
-	
 	d1s = droped.filter(lambda x: x.label == '1.0')
 	d0s = droped.filter(lambda x: x.label == '0.0')
 	(d0s_splited, droped) = droped.randomSplit([3, 97])
@@ -213,66 +212,70 @@ if __name__ == "__main__":
 	# 3 feature engineer
 	trainlpRDDs = FeaTureEngineerer(trainlpRDDs)
 	
-	print("============= Training ===============" + gettime(time()))
-	model = ML(trainlpRDDs , algorithmMETHOD)
-	ModelingDuration = time() - StartTime
 	
-	print("============= Predicting =============" + gettime(time()))
-	prediction = model.predict(testlpRDD.map(lambda x: x.features))
+	for NumTrees in NumTreesPool:
+		for NumMaxTreeDepth in NumMaxTreeDepthPool:
+			for NumMaxTreeBins in NumMaxTreeBinsPool:
+				print("============= Training ===============" + gettime(time()))
+				model = ML(trainlpRDDs , algorithmMETHOD)
+				ModelingDuration = time() - StartTime
+				
+				print("============= Predicting =============" + gettime(time()))
+				prediction = model.predict(testlpRDD.map(lambda x: x.features))
 
-	print("============= Computing ==============" + gettime(time()))
-	PredictionsAndLabel = prediction.zip(testlpRDD.map(lambda lp: lp.label))
-	ErrCount = PredictionsAndLabel.filter(lambda lp: (lp[0] != lp[1])).count()
-	ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
-	trainCount= trainlpRDDs.count()
-	TestCount = testlpRDD.count()
-	ErrRate = float(ErrCount) / TestCount * 100
+				print("============= Computing ==============" + gettime(time()))
+				PredictionsAndLabel = prediction.zip(testlpRDD.map(lambda lp: lp.label))
+				ErrCount = PredictionsAndLabel.filter(lambda lp: (lp[0] != lp[1])).count()
+				ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
+				trainCount= trainlpRDDs.count()
+				TestCount = testlpRDD.count()
+				ErrRate = float(ErrCount) / TestCount * 100
+				
+				print("============= Saving =================" + gettime(time()))
+				with open('info.txt' , 'a') as finfo:
+					print(str(gettime(StartTime)) , file = finfo)
+					print("Label                 :" + PredictLABEL , file = finfo)
+					print('Method:               :' + algorithmMETHOD , file = finfo)
+					print("DataSplit             :" + DataSplit , file = finfo)
+					print("FeatureEngineer       :" + feature_Engineering , file = finfo)
+					if algorithmMETHOD == 'GBT' or algorithmMETHOD == 'RF':
+						print("NumTrees              :" + str(NumTrees), file = finfo)
+					if algorithmMETHOD != 'NB':
+						print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
+						print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
+					if algorithmMETHOD == 'GBT':
+						print("LearningRate          :" + str(LearningRate) , file = finfo)
+					print("train                 :" + str(trainCount) , file = finfo)
+					print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
+					print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
+					print("ErrorCount            :" + str(ErrCount) , file = finfo)
+					print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
+					print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
+					print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
+				with open('Trees.txt' , 'a') as ftree:
+					print(str(gettime(StartTime)) , file = finfo)
+					print("Tree                  :" + model.toDebugString() , file = ftree)
+					print("End of these trees!\n\n\n" , file = ftree)
+
+				print("============= Printing ===============" + gettime(time()))
+				print("Label                 :" + PredictLABEL)
+				print('Method:               :' + algorithmMETHOD)
+				print("DataSplit             :" + DataSplit)
+				print("FeatureEngineer       :" + feature_Engineering)
+				if algorithmMETHOD != 'NB':
+					print("NumTrees              :" + str(NumTrees))
+					print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
+					print("MaxTreeBins           :" + str(NumMaxTreeBins))
+				print("train                 :" + str(trainCount))
+				print("AUC                   :" + str(ModelMetric.areaUnderROC))
+				print("APR                   :" + str(ModelMetric.areaUnderPR))
+				print("ErrorCount            :" + str(ErrCount))
+				print("ErrorRate             :" + str(ErrRate) + "%")
+				print("ModelingDuration      :" + str(ModelingDuration))
+
+				print("============= Done ===================" + gettime(time()))
 	
-	print("============= Saving =================" + gettime(time()))
-	with open('info.txt' , 'a') as finfo:
-		print(str(gettime(StartTime)) , file = finfo)
-		print("Label                 :" + PredictLABEL , file = finfo)
-		print('Method:               :' + algorithmMETHOD , file = finfo)
-		print("DataSplit             :" + DataSplit , file = finfo)
-		print("FeatureEngineer       :" + feature_Engineering , file = finfo)
-		if algorithmMETHOD == 'GBT' or algorithmMETHOD == 'RF':
-			print("NumTrees              :" + str(NumTrees), file = finfo)
-		if algorithmMETHOD != 'NB':
-			print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
-			print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
-		if algorithmMETHOD == 'GBT':
-			print("LearningRate          :" + str(LearningRate) , file = finfo)
-		print("train                 :" + str(trainCount) , file = finfo)
-		print("AUC                   :" + str(ModelMetric.areaUnderROC) , file = finfo)
-		print("APR                   :" + str(ModelMetric.areaUnderPR) , file = finfo)
-		print("ErrorCount            :" + str(ErrCount) , file = finfo)
-		print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
-		print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
-		print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
-		print("Tree                  :" + model.toDebugString() , file = finfo)
-	'''
-	for i in range(len(PredictionsAndLabels)):
-		with open(("PredictionsAndLabels" + str(i + 1) + ".csv") , 'a') as fPrediction:
-			for (prediction, label) in PredictionsAndLabels[i].collect():
-				print(str(prediction) + "," + str(label), file=fPrediction)
-	'''
-	print("============= Printing ===============" + gettime(time()))
-	print("Label                 :" + PredictLABEL)
-	print('Method:               :' + algorithmMETHOD)
-	print("DataSplit             :" + DataSplit)
-	print("FeatureEngineer       :" + feature_Engineering)
-	if algorithmMETHOD != 'NB':
-		print("NumTrees              :" + str(NumTrees))
-		print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
-		print("MaxTreeBins           :" + str(NumMaxTreeBins))
-	print("train                 :" + str(trainCount))
-	print("AUC                   :" + str(ModelMetric.areaUnderROC))
-	print("APR                   :" + str(ModelMetric.areaUnderPR))
-	print("ErrorCount            :" + str(ErrCount))
-	print("ErrorRate             :" + str(ErrRate) + "%")
-	print("ModelingDuration      :" + str(ModelingDuration))
-
-	print("============= Done ===================" + gettime(time()))
 	print("TotalDuration :"+str(time()-StartTime))
+	
 	sc.stop()
 	
