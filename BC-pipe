@@ -34,6 +34,10 @@ if True:
 	# FILE = 'G:\\dataset\\kaggle_expedia-personalized-sort\\train_15m.csv'	# for my PC @ home
 	# FILE = 'D:\\dataset\\expedia\\train_15m.csv'							# for my poor Laptop
 	FILE = 's3n://nccu-spark-big-data/train.csv'	# for spark ec2 ('s3n://' is for hadoop 2.6 earlier , for 2.7 and later use 's3a://')
+	# FILE = 'gs://BUCKETNAME/SEC_PATH/train.csv'
+	# *****File exported*****
+	OUTPUT_PATH = ''	# none as './' , 'gs://BUCKETNAME/SEC_PATH/' as GCP, 's3n://BUCKETNAME/' as AWS 2.6 earlier, and 's3a://...' as 2.7 later.
+				# never add the file name
 
 def CreateSparkContext():
 	sparkConf = SparkConf()                                            \
@@ -233,7 +237,7 @@ if __name__ == "__main__":
 				ErrRate = float(ErrCount) / TestCount * 100
 				
 				print("============= Saving =================" + gettime(time()))
-				with open('info.txt' , 'a') as finfo:
+				with open( OUTPUT_PATH + 'info.txt' , 'a') as finfo:
 					print(str(gettime(StartTime)) , file = finfo)
 					print("Label                 :" + PredictLABEL , file = finfo)
 					print('Method:               :' + algorithmMETHOD , file = finfo)
@@ -253,7 +257,7 @@ if __name__ == "__main__":
 					print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
 					print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
 					print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
-				with open('Trees.txt' , 'a') as ftree:
+				with open( OUTPUT_PATH +'Trees.txt' , 'a') as ftree:
 					print(str(gettime(StartTime)) , file = ftree)
 					print("Tree                  :" + model.toDebugString() , file = ftree)
 					print("End of these trees!\n\n\n" , file = ftree)
