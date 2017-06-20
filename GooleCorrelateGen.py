@@ -110,22 +110,22 @@ if __name__ == "__main__":
 
 	# ===2=== The Price correlations between the proce searched and the whole country median
 	# The mdeian price of the hotel ever
-	DictEverPriceGap = DictMedianByKey(f, 7, 15)
-	f = f.map(lambda x: (Dater(x[1].split()[0]) ,\
-						((float(x[15]) - DictEverPriceGap[x[7]] / (float(x[15])) if float(x[15]) !=0 else 'FAIL')),\
-			  ))
+	# DictEverPriceGap = DictMedianByKey(f, 7, 15)
+	# f = f.map(lambda x: (Dater(x[1].split()[0]) ,\
+						# ((float(x[15]) - DictEverPriceGap[x[7]] / (float(x[15])) if float(x[15]) !=0 else 'FAIL')),\
+			  # ))
 	
-	f = f.map(lambda x:    ( DateMagician(x[0]) ,x[1] ) ).filter(lambda x: (x[0] != -1 and x[1] != 'FAIL')).reduceByKey(lambda x,y: (float(x) + float(y))/2)
+	# f = f.map(lambda x:    ( DateMagician(x[0]) ,x[1] ) ).filter(lambda x: (x[0] != -1 and x[1] != 'FAIL')).reduceByKey(lambda x,y: (float(x) + float(y))/2)
 	
 	
 	# ===3=== weekly bookings
 	# f = f.map(lambda x: (DateMagician(Dater(x[1].split()[0])) , x[-1] )).filter(lambda x: (x[0] != -1)).reduceByKey(lambda x,y: (int(x) + int(y)))
 	
 	# ===4=== averge [14]
-	# f = f.map(lambda x: (DateMagician(Dater(x[1].split()[0])) , x[14] )).reduceByKey(lambda x,y: (int(x) + int(y))/2.0)
+	f = f.map(lambda x: (DateMagician(Dater(x[1].split()[0])) , x[14] )).reduceByKey(lambda x,y: (float(x) + float(y))/2.0)
 	
-	# ===5=== booking rate... fail cause the number is too small for float, so replace with counts and divide them.
-	# f = f.map(lambda x: (DateMagician(Dater(x[1].split()[0])) , 1 )).reduceByKey(lambda x,y: (int(x) + int(y)))
+	# ===5=== booking rate
+	# f = f.map(lambda x: (DateMagician(Dater(x[1].split()[0])) , 1 )).reduceByKey(lambda x,y: (float(x) + float(y))/2)
 	
 	print (f.first())
 	print("============= Saving =================" + gettime(time()))
