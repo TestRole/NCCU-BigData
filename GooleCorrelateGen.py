@@ -112,7 +112,7 @@ if __name__ == "__main__":
 	# The mdeian price of the hotel ever
 	DictEverPriceGap = DictMedianByKey(f, 7, 15)
 	f = f.map(lambda x: (Dater(x[1].split()[0]) ,\
-						((float(x[15]) - DictDestCtyPriceGap[x[7]] / (float(x[15])) if float(x[15]) !=0 else 'FAIL')),\
+						((float(x[15]) - DictEverPriceGap[x[7]] / (float(x[15])) if float(x[15]) !=0 else 'FAIL')),\
 			  ))
 	
 	f = f.map(lambda x:    ( DateMagician(x[0]) ,x[1] ) ).filter(lambda x: (x[0] != -1 and x[1] != 'FAIL')).reduceByKey(lambda x,y: (float(x) + float(y))/2)
