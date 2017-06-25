@@ -19,7 +19,7 @@ if True:
 	DataSplit='ALL_balanced'
 	# *****Main Parameters*****
 	PredictLABEL = 'booking'	#	'booking' OR 'click'
-	algos = ['Logs']	# RF, GBT, NB or DT
+	algos = ['RF','DT','GBT','Logs']	# RF, GBT, NB or DT
 	# *****Tree Parameters*****
 	NumTreesPool = [25] #Bigger you set, longer your program run.
 	NumMaxTreeDepthPool = [15] #max is 30, if it set to high, it could cause memory run out.
@@ -36,7 +36,7 @@ if True:
 	# FILE = 's3n://nccu-spark-big-data/train_15m.csv'	# for spark ec2 ('s3n://' is for hadoop 2.6 earlier , for 2.7 and later use 's3a://')
 	# FILE = 'gs://BUCKETNAME/SEC_PATH/train.csv'
 	# *****File exported*****
-	OUTPUT_PATH = ''	# none as './' , 'gs://BUCKETNAME/SEC_PATH/' as GCP, 's3n://BUCKETNAME/' as AWS 2.6 earlier, and 's3a://...' as 2.7 later.
+	OUTPUT_PATH = ''	# none as './' , '/home/USER_NAME/.../' as GCP and AWS instance, 's3n://BUCKETNAME/' as AWS 2.6 earlier, and 's3a://.../' as 2.7 later.
 				# never add the file name
 
 def CreateSparkContext():
@@ -221,69 +221,73 @@ if __name__ == "__main__":
 	
 	trainCount= trainlpRDDs.count()
 	TestCount = testlpRDD.count()
+	for algo in algos:
+		if algo == 'Logs':
+			NumTreesPool == [0]
+			NumMaxTreeDepthPool == [0]
+			NumMaxTreeBinsPool == [0]
+		for NumTrees in NumTreesPool:
+			for NumMaxTreeDepth in NumMaxTreeDepthPool:
+				for NumMaxTreeBins in NumMaxTreeBinsPool:
+					print("============= Training ===============" + gettime(time()))
+					model = ML(trainlpRDDs , algo)
+					ModelingDuration = time() - StartTime
+					
+					print("============= Predicting =============" + gettime(time()))
+					prediction = model.predict(testlpRDD.map(lambda x: x.features)).map(lambda x:float(x))
 
-	for NumTrees in NumTreesPool:
-		for NumMaxTreeDepth in NumMaxTreeDepthPool:
-			for NumMaxTreeBins in NumMaxTreeBinsPool:
-				print("============= Training ===============" + gettime(time()))
-				model = ML(trainlpRDDs , algo)
-				ModelingDuration = time() - StartTime
-				
-				print("============= Predicting =============" + gettime(time()))
-				prediction = model.predict(testlpRDD.map(lambda x: x.features)).map(lambda x:float(x))
+					print("============= Computing ==============" + gettime(time()))
+					PredictionsAndLabel = prediction.zip(testL)
+					ErrCount = PredictionsAndLabel.filter(lambda lp: (lp[0] != lp[1])).count()
+					ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
+					ErrRate = float(ErrCount) / TestCount * 100
+					AUC = str(ModelMetric.areaUnderROC)
+					APR = str(ModelMetric.areaUnderPR)
+					
+					print("============= Saving =================" + gettime(time()))
+					with open( OUTPUT_PATH + 'info.txt' , 'a') as finfo:
+						print(str(gettime(StartTime)) , file = finfo)
+						print("Label                 :" + PredictLABEL , file = finfo)
+						print('Method                :' + algo , file = finfo)
+						print("DataSplit             :" + DataSplit , file = finfo)
+						print("FeatureEngineer       :" + feature_Engineering , file = finfo)
+						if algo == 'GBT' or algo == 'RF':
+							print("NumTrees              :" + str(NumTrees), file = finfo)
+						if algo == 'GBT' or algo == 'RF' or algo == 'DT':
+							print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
+							print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
+						if algo == 'GBT':
+							print("LearningRate          :" + str(LearningRate) , file = finfo)
+						print("train                 :" + str(trainCount) , file = finfo)
+						print("AUC                   :" + AUC , file = finfo)
+						print("APR                   :" + APR , file = finfo)
+						print("ErrorCount            :" + str(ErrCount) , file = finfo)
+						print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
+						print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
+						print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
+					if algo != 'Logs':
+						with open( OUTPUT_PATH +'Trees.txt' , 'a') as ftree:
+							print(str(gettime(StartTime).replace('feature', '')) , file = ftree)
+							print("Tree                  :" + model.toDebugString() , file = ftree)
+							print("End of these trees!\n\n\n" , file = ftree)
 
-				print("============= Computing ==============" + gettime(time()))
-				PredictionsAndLabel = prediction.zip(testL)
-				ErrCount = PredictionsAndLabel.filter(lambda lp: (lp[0] != lp[1])).count()
-				ModelMetric = BinaryClassificationMetrics(PredictionsAndLabel)
-				ErrRate = float(ErrCount) / TestCount * 100
-				AUC = str(ModelMetric.areaUnderROC)
-				APR = str(ModelMetric.areaUnderPR)
-				
-				print("============= Saving =================" + gettime(time()))
-				with open( OUTPUT_PATH + 'info.txt' , 'a') as finfo:
-					print(str(gettime(StartTime)) , file = finfo)
-					print("Label                 :" + PredictLABEL , file = finfo)
-					print('Method                :' + algo , file = finfo)
-					print("DataSplit             :" + DataSplit , file = finfo)
-					print("FeatureEngineer       :" + feature_Engineering , file = finfo)
-					if algo == 'GBT' or algo == 'RF':
-						print("NumTrees              :" + str(NumTrees), file = finfo)
-					if algo == 'GBT' or algo == 'RF' or algo == 'DT':
-						print("MaxTreeDepth          :" + str(NumMaxTreeDepth) , file = finfo)
-						print("MaxTreeBins           :" + str(NumMaxTreeBins) , file = finfo)
-					if algo == 'GBT':
-						print("LearningRate          :" + str(LearningRate) , file = finfo)
-					print("train                 :" + str(trainCount) , file = finfo)
-					print("AUC                   :" + AUC , file = finfo)
-					print("APR                   :" + APR , file = finfo)
-					print("ErrorCount            :" + str(ErrCount) , file = finfo)
-					print("ErrorRate             :" + str(ErrRate) + "%" , file = finfo)
-					print("ModelingDuration      :" + str(ModelingDuration) , file = finfo)
-					print("TotalDuration :"+str(time()-StartTime) + "\n" , file = finfo)
-				if algo != 'Logs':
-					with open( OUTPUT_PATH +'Trees.txt' , 'a') as ftree:
-						print(str(gettime(StartTime).replace('feature', '')) , file = ftree)
-						print("Tree                  :" + model.toDebugString() , file = ftree)
-						print("End of these trees!\n\n\n" , file = ftree)
+					print("============= Printing ===============" + gettime(time()))
+					print("Label                 :" + PredictLABEL)
+					print('Method:               :' + algo)
+					print("DataSplit             :" + DataSplit)
+					print("FeatureEngineer       :" + feature_Engineering)
+					if algo != 'NB':
+						print("NumTrees              :" + str(NumTrees))
+						print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
+						print("MaxTreeBins           :" + str(NumMaxTreeBins))
+					print("train                 :" + str(trainCount))
+					print("AUC                   :" + AUC)
+					print("APR                   :" + APR)
+					print("ErrorCount            :" + str(ErrCount))
+					print("ErrorRate             :" + str(ErrRate) + "%")
+					print("ModelingDuration      :" + str(ModelingDuration))
 
-				print("============= Printing ===============" + gettime(time()))
-				print("Label                 :" + PredictLABEL)
-				print('Method:               :' + algo)
-				print("DataSplit             :" + DataSplit)
-				print("FeatureEngineer       :" + feature_Engineering)
-				if algo != 'NB':
-					print("NumTrees              :" + str(NumTrees))
-					print("MaxTreeDepth          :" + str(NumMaxTreeDepth))
-					print("MaxTreeBins           :" + str(NumMaxTreeBins))
-				print("train                 :" + str(trainCount))
-				print("AUC                   :" + AUC)
-				print("APR                   :" + APR)
-				print("ErrorCount            :" + str(ErrCount))
-				print("ErrorRate             :" + str(ErrRate) + "%")
-				print("ModelingDuration      :" + str(ModelingDuration))
-
-				print("============= Done ===================" + gettime(time()))
+					print("============= Done ===================" + gettime(time()))
 	
 	print("TotalDuration :"+str(time()-StartTime))
 	
